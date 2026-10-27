@@ -63,3 +63,15 @@ class RiskConfig(BaseModel):
     critical_threshold: float = Field(default=75.0, description="PSI threshold for Critical regime")
     hysteresis_buffer: float = Field(default=5.0, description="Hysteresis point buffer for downward recovery")
     deescalation_frames: int = Field(default=15, description="Consecutive frames below recovery threshold required to de-escalate")
+
+
+class OverlayConfig(BaseModel):
+    """Configuration for photoelastic heatmap rendering, alpha blending, and contour blooms."""
+
+    alpha_min: float = Field(default=0.15, description="Minimum alpha transparency in nominal stress zones")
+    alpha_max: float = Field(default=0.65, description="Maximum alpha transparency in critical surge zones")
+    alpha_power: float = Field(default=1.2, description="Non-linear power scaling for adaptive alpha mapping")
+    upsample_blur_ksize: int = Field(default=15, description="Gaussian kernel size for smoothing upsampled stress grid")
+    hotspot_bloom_radius: int = Field(default=40, description="Pixel radius for radial Gaussian bloom at peak hotspot")
+    hotspot_bloom_intensity: float = Field(default=0.35, description="Intensity factor for hotspot bloom additive blending")
+    contour_levels: list[float] = Field(default=[0.60, 0.75, 0.90], description="Iso-stress contour ratios relative to local peak stress")
