@@ -9,14 +9,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Video Ingestion
 
-- [ ] **INGEST-01**: User can select and load pre-recorded crowd benchmark video files (.mp4/.avi) from local disk
-- [ ] **INGEST-02**: User can control playback (play, pause, loop, and seek frame-by-frame)
+- [x] **INGEST-01**: User can select and load pre-recorded crowd benchmark video files (.mp4/.avi) from local disk
+- [x] **INGEST-02**: User can control playback (play, pause, loop, and seek frame-by-frame)
 
 ### Vision & Optical Flow Tracking
 
-- [ ] **FLOW-01**: System extracts dense inter-frame optical flow fields (magnitude and directional vectors) using OpenCV
-- [ ] **FLOW-02**: System detects crowd density and spatial occupancy distribution across the camera frame
-- [ ] **FLOW-03**: System computes localized velocity variance (turbulence and sudden stagnation) from optical flow vectors
+- [x] **FLOW-01**: System extracts dense inter-frame optical flow fields (magnitude and directional vectors) using OpenCV
+- [x] **FLOW-02**: System detects crowd density and spatial occupancy distribution across the camera frame
+- [x] **FLOW-03**: System computes localized velocity variance (turbulence and sudden stagnation) from optical flow vectors
 
 ### Digital Photoelastic Simulation & Stress Metric
 
@@ -68,11 +68,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INGEST-01 | Phase 1 | Pending |
-| INGEST-02 | Phase 1 | Pending |
-| FLOW-01 | Phase 1 | Pending |
-| FLOW-02 | Phase 1 | Pending |
-| FLOW-03 | Phase 1 | Pending |
+| INGEST-01 | Phase 1 | Complete |
+| INGEST-02 | Phase 1 | Complete |
+| FLOW-01 | Phase 1 | Complete |
+| FLOW-02 | Phase 1 | Complete |
+| FLOW-03 | Phase 1 | Complete |
 | SIM-01 | Phase 2 | Pending |
 | SIM-02 | Phase 2 | Pending |
 | SIM-03 | Phase 2 | Pending |

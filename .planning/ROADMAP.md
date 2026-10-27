@@ -6,7 +6,7 @@ ForceSight makes invisible crowd pressure visible through Digital Photoelastic S
 
 ## Phases
 
-- [ ] **Phase 1: Video Ingestion & Dense Optical Flow Core** - Ingest crowd footage and compute OpenCV dense optical flow fields and motion vectors.
+- [x] **Phase 1: Video Ingestion & Dense Optical Flow Core** - Ingest crowd footage and compute OpenCV dense optical flow fields and motion vectors.
 - [ ] **Phase 2: Digital Photoelastic Simulation & Peak Stress Index (PSI)** - Formulate the 0–100 Peak Stress Index from density and optical flow turbulence.
 - [ ] **Phase 3: Photoelastic Birefringence Heatmap Overlay** - Render dynamic chromatic stress fringes (blue ➔ yellow ➔ crimson) directly onto crowd video frames.
 - [ ] **Phase 4: Marshal Early-Warning Dashboard & Alert System** - Streamlit operator interface with live video, PSI gauge, rolling charts, and gate throttle advisories.
@@ -27,8 +27,8 @@ ForceSight makes invisible crowd pressure visible through Digital Photoelastic S
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Video ingestion loader and synthetic crowd benchmark generator
-- [ ] 01-02: Farnebäck dense optical flow tracking and velocity turbulence extraction
+- [x] 01-01: Video ingestion loader and synthetic crowd benchmark generator
+- [x] 01-02: Farnebäck dense optical flow tracking and velocity turbulence extraction
 
 ### Phase 2: Digital Photoelastic Simulation & Peak Stress Index (PSI)
 **Goal**: Formulate and implement the Digital Photoelastic stress engine, coupling density with velocity turbulence to generate the 0–100 Peak Stress Index.
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Video Ingestion & Dense Optical Flow Core | 0/2 | Ready to execute | - |
+| 1. Video Ingestion & Dense Optical Flow Core | 2/2 | Complete | 2026-10-27 |
 | 2. Digital Photoelastic Simulation & Peak Stress Index (PSI) | 0/2 | Not started | - |
 | 3. Photoelastic Birefringence Heatmap Overlay | 0/2 | Not started | - |
 | 4. Marshal Early-Warning Dashboard & Alert System | 0/2 | Not started | - |

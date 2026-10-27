@@ -1,9 +1,9 @@
 ---
 phase: "1"
 slug: "video-ingestion-dense-optical-flow-core"
-status: draft
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-10-27"
 ---
 
@@ -38,11 +38,11 @@ created: "2026-10-27"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 01-01-01 | 01 | 1 | INGEST-01 | — | Graceful error on invalid video path | unit | `pytest tests/test_ingestion.py -k test_invalid_path -q` | ❌ W0 | ⬜ pending |
-| 01-01-02 | 01 | 1 | INGEST-01, INGEST-02 | — | Frame extraction, looping, and proxy downscaling | unit | `pytest tests/test_ingestion.py -k test_frame_stream -q` | ❌ W0 | ⬜ pending |
-| 01-01-03 | 01 | 1 | INGEST-01 | — | Synthetic crowd video generation | integration | `pytest tests/test_synthetic_generator.py -q` | ❌ W0 | ⬜ pending |
-| 01-02-01 | 02 | 1 | FLOW-01 | — | Farnebäck optical flow vector extraction | unit | `pytest tests/test_flow.py -k test_farneback_flow -q` | ❌ W0 | ⬜ pending |
-| 01-02-02 | 02 | 1 | FLOW-02, FLOW-03 | — | Spatial density and velocity variance grid calculation | unit | `pytest tests/test_flow.py -k test_turbulence_and_stagnation -q` | ❌ W0 | ⬜ pending |
+| 01-01-01 | 01 | 1 | INGEST-01 | — | Graceful error on invalid video path | unit | `pytest tests/test_ingestion.py -k test_invalid_path -q` | ✅ | ✅ green |
+| 01-01-02 | 01 | 1 | INGEST-01, INGEST-02 | — | Frame extraction, looping, and proxy downscaling | unit | `pytest tests/test_ingestion.py -k test_frame_stream -q` | ✅ | ✅ green |
+| 01-01-03 | 01 | 1 | INGEST-01 | — | Synthetic crowd video generation | integration | `pytest tests/test_synthetic_generator.py -q` | ✅ | ✅ green |
+| 01-02-01 | 02 | 1 | FLOW-01 | — | Farnebäck optical flow vector extraction | unit | `pytest tests/test_flow.py -k test_farneback_flow -q` | ✅ | ✅ green |
+| 01-02-02 | 02 | 1 | FLOW-02, FLOW-03 | — | Spatial density and velocity variance grid calculation | unit | `pytest tests/test_flow.py -k test_turbulence_and_stagnation -q` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
