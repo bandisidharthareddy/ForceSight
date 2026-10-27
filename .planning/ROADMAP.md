@@ -43,8 +43,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Spatial density estimator and coupled Helbing stress field engine
-- [ ] 02-02: Asymmetric EMA temporal smoothing and hysteresis state machine
+- [x] 02-01: Spatial density estimator and coupled Helbing stress field engine
+- [x] 02-02: Asymmetric EMA temporal smoothing and hysteresis state machine
 
 ### Phase 3: Photoelastic Birefringence Heatmap Overlay
 **Goal**: Render real-time chromatic stress fringes (blue ➔ yellow ➔ deep crimson) directly over crowd footage mimicking photoelastic materials under polarized stress.

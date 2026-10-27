@@ -1,9 +1,9 @@
 ---
 phase: "2"
 slug: "digital-photoelastic-simulation-peak-stress-index-psi"
-status: draft
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-10-27"
 ---
 
@@ -19,16 +19,16 @@ created: "2026-10-27"
 |----------|-------|
 | **Framework** | pytest 8.x |
 | **Config file** | `pytest.ini` |
-| **Quick run command** | `pytest tests/test_physics.py -q` |
-| **Full suite command** | `pytest tests/ -q` |
+| **Quick run command** | `python -m pytest tests/test_physics.py -q` |
+| **Full suite command** | `python -m pytest tests/ -q` |
 | **Estimated runtime** | ~4 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `pytest tests/test_physics.py -q`
-- **After every plan wave:** Run `pytest tests/ -q`
+- **After every task commit:** Run `python -m pytest tests/test_physics.py -q`
+- **After every plan wave:** Run `python -m pytest tests/ -q`
 - **Before `/gsd-verify-work`:** Full suite must be green
 - **Max feedback latency:** 5 seconds
 
@@ -38,10 +38,10 @@ created: "2026-10-27"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | SIM-01 | — | Spatial density extraction from edge gradients | unit | `pytest tests/test_physics.py -k test_density -q` | ❌ W0 | ⬜ pending |
-| 02-01-02 | 01 | 1 | SIM-01 | — | Coupled Helbing stress surface & 0-100 PSI calculation | unit | `pytest tests/test_physics.py -k test_stress_formula -q` | ❌ W0 | ⬜ pending |
-| 02-02-01 | 02 | 1 | SIM-02 | — | Asymmetric fast-attack / slow-decay EMA filter | unit | `pytest tests/test_physics.py -k test_asymmetric_ema -q` | ❌ W0 | ⬜ pending |
-| 02-02-02 | 02 | 1 | SIM-03 | — | 3-tier risk classification with 5-point hysteresis | unit | `pytest tests/test_physics.py -k test_hysteresis -q` | ❌ W0 | ⬜ pending |
+| 02-01-01 | 01 | 1 | SIM-01 | — | Spatial density extraction from edge gradients | unit | `python -m pytest tests/test_physics.py -k test_density -q` | ✅ | ✅ green |
+| 02-01-02 | 01 | 1 | SIM-01 | — | Coupled Helbing stress surface & 0-100 PSI calculation | unit | `python -m pytest tests/test_physics.py -k test_stress_formula -q` | ✅ | ✅ green |
+| 02-02-01 | 02 | 2 | SIM-02 | — | Asymmetric fast-attack / slow-decay EMA filter | unit | `python -m pytest tests/test_physics.py -k test_asymmetric_ema -q` | ✅ | ✅ green |
+| 02-02-02 | 02 | 2 | SIM-03 | — | 3-tier risk classification with 5-point hysteresis | unit | `python -m pytest tests/test_physics.py -k test_hysteresis -q` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,8 +49,8 @@ created: "2026-10-27"
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_physics.py` — unit tests for density, stress engine, asymmetric EMA, and hysteresis state machine
-- [ ] `scipy` — install scipy package if missing
+- [x] `tests/test_physics.py` — unit tests for density, stress engine, asymmetric EMA, and hysteresis state machine
+- [x] `scipy` — install scipy package if missing (verified installed v1.18.1)
 
 ---
 
@@ -64,11 +64,11 @@ created: "2026-10-27"
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 5s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 5s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated (21 of 21 tests green)

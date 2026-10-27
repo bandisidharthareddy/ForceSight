@@ -20,9 +20,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Digital Photoelastic Simulation & Stress Metric
 
-- [ ] **SIM-01**: System computes the **Peak Stress Index (PSI: 0 to 100)** by coupling localized crowd density with optical flow velocity variance
-- [ ] **SIM-02**: System applies temporal exponential moving average (EMA) smoothing to prevent transient single-frame spikes
-- [ ] **SIM-03**: System categorizes PSI into three clear operating regimes: Nominal (0–49), Warning (50–74), and Critical (75–100)
+- [x] **SIM-01**: System computes the **Peak Stress Index (PSI: 0 to 100)** by coupling localized crowd density with optical flow velocity variance
+- [x] **SIM-02**: System applies temporal exponential moving average (EMA) smoothing to prevent transient single-frame spikes
+- [x] **SIM-03**: System categorizes PSI into three clear operating regimes: Nominal (0–49), Warning (50–74), and Critical (75–100)
 
 ### Photoelastic Heatmap Overlay
 
