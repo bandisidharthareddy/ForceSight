@@ -155,3 +155,23 @@ def test_alert_banners_content():
     )
     banner_crit = create_alert_banner_html(res_crit)
     assert "HALT INGRESS IMMEDIATELY" in banner_crit
+
+
+
+# ============================================================================
+# Plan 04-02 Task 2: Dashboard App Integration Tests
+# ============================================================================
+
+from src.dashboard.app import scan_benchmark_videos, main
+
+
+def test_dashboard_app_scan_videos():
+    """scan_benchmark_videos correctly locates local MP4 benchmark files."""
+    videos = scan_benchmark_videos()
+    assert len(videos) > 0
+    assert any("synthetic_surge.mp4" in v for v in videos)
+
+
+def test_dashboard_app_structure():
+    """Verify src/dashboard/app exports main callable and initializes cleanly."""
+    assert callable(main)
