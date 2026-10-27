@@ -56,7 +56,7 @@ Plans:
   1. Continuous 2D stress fields map to a photoelastic chromatic spectrum (cool blue ➔ yellow ➔ deep crimson) without discrete stepping artifacts.
   2. Alpha-blended overlay renders onto video frames while preserving visual clarity of individuals in the crowd.
   3. Chokepoint compression hotspots dynamically flare in deep crimson as stress approaches critical levels.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 03-01: Photoelastic chromatic colormap generator and continuous field interpolator
