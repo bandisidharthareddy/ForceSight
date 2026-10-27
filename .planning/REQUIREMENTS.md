@@ -32,11 +32,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Marshal Dashboard & Early-Warning Alerts
 
-- [ ] **DASH-01**: User can view the live processed video with the real-time Photoelastic Heatmap Overlay
-- [ ] **DASH-02**: User can view a glanceable Peak Stress Index (0–100) gauge and current risk tier badge (Nominal, Warning, Critical)
-- [ ] **DASH-03**: System displays high-contrast visual alert banners with concrete gate-throttling recommendations when PSI exceeds 50 (Warning) and 75 (Critical)
-- [ ] **DASH-04**: User can inspect a live rolling time-series graph of PSI over time to observe stress buildup momentum ($d\text{PSI}/dt$)
-- [ ] **DASH-05**: User can adjust sensitivity, optical flow parameters, and threshold triggers via sidebar controls
+- [x] **DASH-01**: User can view the live processed video with the real-time Photoelastic Heatmap Overlay
+- [x] **DASH-02**: User can view a glanceable Peak Stress Index (0–100) gauge and current risk tier badge (Nominal, Warning, Critical)
+- [x] **DASH-03**: System displays high-contrast visual alert banners with concrete gate-throttling recommendations when PSI exceeds 50 (Warning) and 75 (Critical)
+- [x] **DASH-04**: User can inspect a live rolling time-series graph of PSI over time to observe stress buildup momentum ($d\text{PSI}/dt$)
+- [x] **DASH-05**: User can adjust sensitivity, optical flow parameters, and threshold triggers via sidebar controls
 
 ## v2 Requirements
 

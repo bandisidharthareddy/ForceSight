@@ -1,9 +1,9 @@
 ---
 phase: "4"
 slug: "marshal-early-warning-dashboard-alert-system"
-status: draft
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-10-27"
 ---
 
@@ -38,10 +38,10 @@ created: "2026-10-27"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-01-01 | 01 | 1 | DASH-01 | — | Integrated end-to-end pipeline processing | unit | `python -m pytest tests/test_dashboard.py -k test_pipeline -q` | ❌ W0 | ⬜ pending |
-| 04-01-02 | 01 | 1 | DASH-02, DASH-04 | — | Plotly radial gauge and rolling time-series chart generators | unit | `python -m pytest tests/test_dashboard.py -k test_components -q` | ❌ W0 | ⬜ pending |
-| 04-02-01 | 02 | 2 | DASH-03 | — | High-contrast actionable alert banner generator | unit | `python -m pytest tests/test_dashboard.py -k test_alert_banners -q` | ❌ W0 | ⬜ pending |
-| 04-02-02 | 02 | 2 | DASH-05 | — | Streamlit dashboard imports and configuration schema | unit | `python -m pytest tests/test_dashboard.py -k test_dashboard_app -q` | ❌ W0 | ⬜ pending |
+| 04-01-01 | 01 | 1 | DASH-01 | — | Integrated end-to-end pipeline processing | unit | `python -m pytest tests/test_dashboard.py -k test_pipeline -q` | ✅ | ✅ green |
+| 04-01-02 | 01 | 1 | DASH-02, DASH-04 | — | Plotly radial gauge and rolling time-series chart generators | unit | `python -m pytest tests/test_dashboard.py -k test_components -q` | ✅ | ✅ green |
+| 04-02-01 | 02 | 2 | DASH-03 | — | High-contrast actionable alert banner generator | unit | `python -m pytest tests/test_dashboard.py -k test_alert_banners -q` | ✅ | ✅ green |
+| 04-02-02 | 02 | 2 | DASH-05 | — | Streamlit dashboard imports and configuration schema | unit | `python -m pytest tests/test_dashboard.py -k test_dashboard_app -q` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,7 +49,7 @@ created: "2026-10-27"
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_dashboard.py` — unit tests for pipeline, Plotly components, alert banners, and dashboard app integration
+- [x] `tests/test_dashboard.py` — unit tests for pipeline, Plotly components, alert banners, and dashboard app integration
 
 ---
 
@@ -63,11 +63,11 @@ created: "2026-10-27"
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 5s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 5s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated (39 of 39 tests green)

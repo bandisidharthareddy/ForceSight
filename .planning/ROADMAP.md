@@ -77,8 +77,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Integrated pipeline engine and Plotly telemetry components
-- [ ] 04-02: Streamlit marshal command center dashboard and early-warning alert system
+- [x] 04-01: Integrated pipeline engine and Plotly telemetry components
+- [x] 04-02: Streamlit marshal command center dashboard and early-warning alert system
 
 ### Phase 5: Benchmark Evaluation & System Hardening
 **Goal**: Benchmark ForceSight against real-world crowd surge and crush video scenarios to validate detection stability, responsiveness, and false-alarm resistance.
