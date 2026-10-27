@@ -94,3 +94,108 @@ def test_upsampling_softens_gradients(dummy_stress_grid: np.ndarray):
     grad_y = np.abs(np.diff(upscaled, axis=0))
     # Max single-pixel gradient step across 360 pixels should be gentle (< 5.0)
     assert np.max(grad_y) < 5.0
+
+
+# ============================================================================
+# Plan 03-02: Overlay Renderer, Adaptive Alpha, and Hotspot Bloom Tests
+# ============================================================================
+
+from src.visualization.overlay import OverlayResult, PhotoelasticOverlayRenderer
+
+
+@pytest.fixture
+def dummy_base_frame() -> np.ndarray:
+    """Creates a sample 360x640 3-channel BGR base frame with a grey background."""
+    # Grey background [128, 128, 128]
+    frame = np.full((360, 640, 3), 128, dtype=np.uint8)
+    # Add a mock person silhouette in the corner
+    frame[50:150, 50:100] = [50, 50, 50]
+    return frame
+
+
+def test_alpha_blending_transparency(dummy_base_frame: np.ndarray):
+    """Low stress uses minimal alpha (preserves base frame); high stress applies strong tint."""
+    renderer = PhotoelasticOverlayRenderer(
+        config=OverlayConfig(alpha_min=0.15, alpha_max=0.65, alpha_power=1.0)
+    )
+
+    # Low stress everywhere (PSI = 5.0)
+    low_stress = np.full((18, 32), 5.0, dtype=np.float32)
+    res_low = renderer.blend_frame(dummy_base_frame, low_stress, peak_psi=5.0)
+
+    # High stress everywhere (PSI = 95.0)
+    high_stress = np.full((18, 32), 95.0, dtype=np.float32)
+    res_high = renderer.blend_frame(dummy_base_frame, high_stress, peak_psi=95.0)
+
+    # The background was 128. Under low stress, alpha ~0.175, color is cool blue [229, 136, 30].
+    # Difference from base frame should be much smaller than under high stress.
+    diff_low = np.mean(np.abs(res_low.blended_frame.astype(float) - dummy_base_frame.astype(float)))
+    diff_high = np.mean(np.abs(res_high.blended_frame.astype(float) - dummy_base_frame.astype(float)))
+
+    assert diff_high > diff_low * 2.5
+
+
+def test_rgba_overlay_dimensions(dummy_base_frame: np.ndarray, dummy_stress_grid: np.ndarray):
+    """Standalone RGBA overlay must have 4 channels and match base frame dimensions."""
+    renderer = PhotoelasticOverlayRenderer()
+    res = renderer.blend_frame(dummy_base_frame, dummy_stress_grid, peak_psi=85.0)
+
+    assert isinstance(res, OverlayResult)
+    assert res.rgba_overlay.shape == (360, 640, 4)
+    assert res.rgba_overlay.dtype == np.uint8
+    # Alpha channel (res.rgba_overlay[:, :, 3]) should be between min and max alpha mapped to 255
+    alpha_chan = res.rgba_overlay[:, :, 3]
+    assert np.min(alpha_chan) >= int(0.14 * 255)
+    assert np.max(alpha_chan) <= int(0.66 * 255)
+
+
+def test_hotspot_overlay_rendering(dummy_base_frame: np.ndarray, dummy_stress_grid: np.ndarray):
+    """Hotspot with peak_psi >= 75 renders radial bloom and iso-stress contours."""
+    renderer = PhotoelasticOverlayRenderer()
+    hotspot_grid_coord = (9, 16)  # center cell
+
+    # Critical surge
+    res_critical = renderer.blend_frame(
+        dummy_base_frame,
+        dummy_stress_grid,
+        hotspot_coords=hotspot_grid_coord,
+        peak_psi=85.0,
+    )
+
+    # Nominal crowd (peak_psi = 15.0)
+    res_nominal = renderer.blend_frame(
+        dummy_base_frame,
+        dummy_stress_grid,
+        hotspot_coords=hotspot_grid_coord,
+        peak_psi=15.0,
+    )
+
+    # Hotspot pixel coordinates should be scaled to frame center
+    expected_x = int((16 + 0.5) * (640 / 32))  # 330
+    expected_y = int((9 + 0.5) * (360 / 18))  # 190
+    assert abs(res_critical.hotspot_pixel[0] - expected_x) <= 2
+    assert abs(res_critical.hotspot_pixel[1] - expected_y) <= 2
+
+    # Under critical stress, bloom adds bright warm colors at the center
+    center_y, center_x = res_critical.hotspot_pixel[1], res_critical.hotspot_pixel[0]
+    critical_center_val = res_critical.blended_frame[center_y, center_x, 2]  # Red channel
+    nominal_center_val = res_nominal.blended_frame[center_y, center_x, 2]
+    assert critical_center_val > nominal_center_val
+
+
+def test_pipeline_visual_render(dummy_base_frame: np.ndarray):
+    """End-to-end integration test from frame to blended overlay."""
+    renderer = PhotoelasticOverlayRenderer()
+    stress_map = np.random.uniform(10.0, 90.0, (18, 32)).astype(np.float32)
+
+    res = renderer.blend_frame(
+        dummy_base_frame,
+        stress_map,
+        hotspot_coords=(5, 10),
+        peak_psi=78.5,
+    )
+
+    assert res.blended_frame.shape == dummy_base_frame.shape
+    assert res.blended_frame.dtype == np.uint8
+    assert res.peak_psi == 78.5
+    assert not np.array_equal(res.blended_frame, dummy_base_frame)
