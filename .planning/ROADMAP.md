@@ -74,11 +74,11 @@ Plans:
   3. High-contrast alert banners present actionable throttle guidance (e.g. "THROTTLE GATE BY 50%", "HALT INGRESS IMMEDIATELY") during Warning/Critical tiers.
   4. Live rolling line chart plots PSI over time, exposing stress rate-of-climb ($d\text{PSI}/dt$).
   5. Sidebar controls allow adjusting optical flow sensitivity, video playback source, and alert thresholds.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Streamlit dashboard shell, layout components, and video player widget
-- [ ] 04-02: Real-time PSI gauges, rolling Plotly stress trend chart, and reactive alert banner
+- [ ] 04-01: Integrated pipeline engine and Plotly telemetry components
+- [ ] 04-02: Streamlit marshal command center dashboard and early-warning alert system
 
 ### Phase 5: Benchmark Evaluation & System Hardening
 **Goal**: Benchmark ForceSight against real-world crowd surge and crush video scenarios to validate detection stability, responsiveness, and false-alarm resistance.
