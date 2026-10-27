@@ -23,3 +23,43 @@ class OpticalFlowConfig(BaseModel):
     poly_sigma: float = Field(default=1.2, description="Standard deviation of the Gaussian used to smooth derivatives")
     flags: int = Field(default=0, description="Operation flags for cv2.calcOpticalFlowFarneback")
     gaussian_blur_size: int = Field(default=5, description="Kernel size for pre-flow Gaussian smoothing (must be odd)")
+
+
+class DensityConfig(BaseModel):
+    """Configuration for spatial crowd density estimation."""
+
+    block_size: int = Field(default=20, description="Spatial grid block size in pixels matching motion stats grid")
+    edge_threshold_low: int = Field(default=50, description="Lower threshold for Canny edge detector")
+    edge_threshold_high: int = Field(default=150, description="Upper threshold for Canny edge detector")
+    edge_weight: float = Field(default=0.65, description="Weight of edge gradient energy in density calculation")
+    flow_weight: float = Field(default=0.35, description="Weight of optical flow occupancy in density calculation")
+    blur_ksize: int = Field(default=5, description="Gaussian blur kernel size for pre-edge smoothing")
+    min_flow_thresh: float = Field(default=0.5, description="Minimum flow magnitude in pixels to count cell as active motion occupancy")
+
+
+class StressConfig(BaseModel):
+    """Configuration for coupled Helbing crowd stress field calculation and PSI normalization."""
+
+    w_density: float = Field(default=30.0, description="Weight for spatial density")
+    w_variance: float = Field(default=25.0, description="Weight for velocity variance")
+    w_interaction: float = Field(default=35.0, description="Weight for coupled density * variance term")
+    w_stagnation: float = Field(default=10.0, description="Weight for stagnation divergence term")
+    scale_factor: float = Field(default=1.0, description="Overall scaling multiplier for stress calibration")
+    percentile_psi: float = Field(default=95.0, description="Percentile of active cells used to compute instantaneous Peak Stress Index")
+    max_expected_variance: float = Field(default=15.0, description="Expected maximum velocity variance for normalization")
+
+
+class SmoothingConfig(BaseModel):
+    """Configuration for asymmetric Exponential Moving Average (EMA) temporal smoothing."""
+
+    alpha_rise: float = Field(default=0.35, description="Fast-attack alpha for rising stress surges")
+    alpha_fall: float = Field(default=0.10, description="Slow-decay alpha for falling stress cooldown")
+
+
+class RiskConfig(BaseModel):
+    """Configuration for 3-tier risk classification and hysteresis debouncing."""
+
+    warning_threshold: float = Field(default=50.0, description="PSI threshold for Warning regime")
+    critical_threshold: float = Field(default=75.0, description="PSI threshold for Critical regime")
+    hysteresis_buffer: float = Field(default=5.0, description="Hysteresis point buffer for downward recovery")
+    deescalation_frames: int = Field(default=15, description="Consecutive frames below recovery threshold required to de-escalate")
