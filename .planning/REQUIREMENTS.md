@@ -1,7 +1,7 @@
 # Requirements: ForceSight
 
 **Defined:** October 27, 2026
-**Core Value:** Making invisible crowd compressive force visible in real time to give security personnel indisputable, early-warning justification to throttle or divert crowds before dangerous crushes develop.
+**Core Value:** Making invisible crowd stress visible in real time through a Digital Photoelastic Heatmap and Peak Stress Index (0–100), giving security marshals indisputable, early-warning visual justification to throttle or divert crowds before dangerous physical crushes develop.
 
 ## v1 Requirements
 
@@ -10,53 +10,45 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Video Ingestion
 
 - [ ] **INGEST-01**: User can select and load pre-recorded crowd benchmark video files (.mp4/.avi) from local disk
-- [ ] **INGEST-02**: User can control playback (play, pause, loop, and frame step)
+- [ ] **INGEST-02**: User can control playback (play, pause, loop, and seek frame-by-frame)
 
-### Vision Detection & Tracking
+### Vision & Optical Flow Tracking
 
-- [ ] **VIS-01**: System detects human heads/persons in video frames using YOLO
-- [ ] **VIS-02**: System extracts 2D centroid coordinates and bounding boxes for each detected individual
-- [ ] **VIS-03**: System tracks inter-frame displacement vectors between consecutive frames
+- [ ] **FLOW-01**: System extracts dense inter-frame optical flow fields (magnitude and directional vectors) using OpenCV
+- [ ] **FLOW-02**: System detects crowd density and spatial occupancy distribution across the camera frame
+- [ ] **FLOW-03**: System computes localized velocity variance (turbulence and sudden stagnation) from optical flow vectors
 
-### Spatial Grid & Ground Calibration
+### Digital Photoelastic Simulation & Stress Metric
 
-- [ ] **GRID-01**: System partitions the monitored chokepoint scene into a calibrated 2D ground grid
-- [ ] **GRID-02**: System applies perspective depth scaling to normalize density across near and far corridor areas
-- [ ] **GRID-03**: System calculates localized crowd density (persons/m²) for each spatial grid cell
+- [ ] **SIM-01**: System computes the **Peak Stress Index (PSI: 0 to 100)** by coupling localized crowd density with optical flow velocity variance
+- [ ] **SIM-02**: System applies temporal exponential moving average (EMA) smoothing to prevent transient single-frame spikes
+- [ ] **SIM-03**: System categorizes PSI into three clear operating regimes: Nominal (0–49), Warning (50–74), and Critical (75–100)
 
-### Physics & Compressive Force Engine
+### Photoelastic Heatmap Overlay
 
-- [ ] **PHYS-01**: System calculates Helbing crowd pressure from localized density and velocity variance
-- [ ] **PHYS-02**: System translates localized pressure into compressive mechanical force in kilograms (kg)
-- [ ] **PHYS-03**: System applies exponential moving average (EMA) temporal smoothing to prevent transient frame jitter
-- [ ] **PHYS-04**: System categorizes crowd risk state into three thresholds: Safe (<150 kg), Warning (150–250 kg), and Critical (>250 kg)
+- [ ] **PHOTO-01**: System maps the continuous 2D stress field to a photoelastic chromatic spectrum (cool blue ➔ yellow ➔ deep crimson) mimicking polarized stress birefringence
+- [ ] **PHOTO-02**: System blends the photoelastic chromatic fringes over the raw crowd footage with calibrated alpha transparency, keeping individuals visible beneath the stress field
+- [ ] **PHOTO-03**: System highlights localized stress peak contours/hotspots where bottleneck compression is highest
 
-### Thermal Heatmap & Visual Overlay
+### Marshal Dashboard & Early-Warning Alerts
 
-- [ ] **HEAT-01**: System computes a 2D continuous force intensity surface using Gaussian spatial filtering
-- [ ] **HEAT-02**: System renders a dynamic thermal color heatmap (Green/Yellow/Red) overlay on the video frame
-- [ ] **HEAT-03**: System applies alpha-transparency blending so the underlying crowd footage remains visible
-
-### Operator Dashboard & Early-Warning Alerts
-
-- [ ] **DASH-01**: User can view real-time processed video alongside current peak compressive force in kg
-- [ ] **DASH-02**: User can view a glanceable risk status gauge (Safe, Warning, Critical) with color indicators
-- [ ] **DASH-03**: System displays high-contrast visual alert banners with concrete gate-throttling recommendations during Warning and Critical states
-- [ ] **DASH-04**: User can inspect a live rolling time-series graph of force (kg vs time) to detect surge momentum
-- [ ] **DASH-05**: User can adjust risk threshold parameters and detection confidence sliders via sidebar controls
+- [ ] **DASH-01**: User can view the live processed video with the real-time Photoelastic Heatmap Overlay
+- [ ] **DASH-02**: User can view a glanceable Peak Stress Index (0–100) gauge and current risk tier badge (Nominal, Warning, Critical)
+- [ ] **DASH-03**: System displays high-contrast visual alert banners with concrete gate-throttling recommendations when PSI exceeds 50 (Warning) and 75 (Critical)
+- [ ] **DASH-04**: User can inspect a live rolling time-series graph of PSI over time to observe stress buildup momentum ($d\text{PSI}/dt$)
+- [ ] **DASH-05**: User can adjust sensitivity, optical flow parameters, and threshold triggers via sidebar controls
 
 ## v2 Requirements
 
 Deferred to future release. Tracked but not in current roadmap.
 
-### Advanced Ingestion & Integration
+### Advanced Ingestion & Calibration
 - **INGEST-03**: System ingests live RTSP / IP camera network streams from CCTV infrastructure
-- **INGEST-04**: System supports multi-camera handoff across consecutive chokepoints
+- **CALIB-01**: User can draw custom polygonal chokepoint ROIs directly on the video canvas
 
-### Advanced Alerting & UX
+### Advanced Alerting
 - **ALERT-01**: System triggers audible tone/chime alerts for critical threshold breaches
-- **ALERT-02**: User can draw custom polygonal chokepoint ROIs directly on the video feed canvas
-- **ALERT-03**: System dispatches mobile push alerts to patrolling marshals
+- **ALERT-02**: System dispatches mobile push alerts to patrolling marshals
 
 ## Out of Scope
 
@@ -64,8 +56,10 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Automated turnstile / gate interlocking | Critical safety hazard — locking physical barriers during panics causes fatal crushes; human marshals must always retain final control |
-| Facial recognition & biometric identity tracking | Privacy violations and unnecessary compute; crowd crush prevention relies purely on physical fluid density |
+| Simulated load-cell hardware / kg pressure measurements | Misleading and uncalibrated; replaced by the normalized 0–100 Peak Stress Index |
+| Simple red bounding box spam | Replaced by organic, continuous Photoelastic Heatmap Overlay |
+| Automated turnstile / gate interlocking | Critical safety hazard — locking physical barriers during panics causes fatal crushes; human marshals must always retain control |
+| Facial recognition & biometric identity tracking | Privacy violations and unnecessary compute; crowd crush prevention relies purely on macroscopic fluid stress |
 | Cloud SaaS multi-tenant streaming | MVP is designed for a self-contained local security marshal workstation |
 
 ## Traceability
@@ -76,30 +70,26 @@ Which phases cover which requirements. Populated during roadmap creation.
 |-------------|-------|--------|
 | INGEST-01 | Phase 1 | Pending |
 | INGEST-02 | Phase 1 | Pending |
-| VIS-01 | Phase 1 | Pending |
-| VIS-02 | Phase 1 | Pending |
-| VIS-03 | Phase 1 | Pending |
-| GRID-01 | Phase 2 | Pending |
-| GRID-02 | Phase 2 | Pending |
-| GRID-03 | Phase 2 | Pending |
-| PHYS-01 | Phase 3 | Pending |
-| PHYS-02 | Phase 3 | Pending |
-| PHYS-03 | Phase 3 | Pending |
-| PHYS-04 | Phase 3 | Pending |
-| HEAT-01 | Phase 4 | Pending |
-| HEAT-02 | Phase 4 | Pending |
-| HEAT-03 | Phase 4 | Pending |
-| DASH-01 | Phase 5 | Pending |
-| DASH-02 | Phase 5 | Pending |
-| DASH-03 | Phase 5 | Pending |
-| DASH-04 | Phase 5 | Pending |
-| DASH-05 | Phase 5 | Pending |
+| FLOW-01 | Phase 1 | Pending |
+| FLOW-02 | Phase 1 | Pending |
+| FLOW-03 | Phase 1 | Pending |
+| SIM-01 | Phase 2 | Pending |
+| SIM-02 | Phase 2 | Pending |
+| SIM-03 | Phase 2 | Pending |
+| PHOTO-01 | Phase 3 | Pending |
+| PHOTO-02 | Phase 3 | Pending |
+| PHOTO-03 | Phase 3 | Pending |
+| DASH-01 | Phase 4 | Pending |
+| DASH-02 | Phase 4 | Pending |
+| DASH-03 | Phase 4 | Pending |
+| DASH-04 | Phase 4 | Pending |
+| DASH-05 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 19 total
-- Mapped to phases: 19
+- v1 requirements: 16 total
+- Mapped to phases: 16
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: October 27, 2026*
-*Last updated: October 27, 2026 after initialization*
+*Last updated: October 27, 2026 after initialization (Photoelastic Simulation pivot)*

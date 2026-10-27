@@ -2,11 +2,11 @@
 
 ## What This Is
 
-ForceSight is a proactive computer vision and predictive crowd pressure simulation system engineered to eliminate crowd surges, stampedes, and crushing incidents at structural bottlenecks (gates, barricades, turnstiles, and narrow passageways). It translates video crowd density analytics into an estimated mechanical force metric (kg) in real time, providing security marshals with a glanceable, color-coded early-warning dashboard to throttle ingress or divert crowds before dangerous thresholds are reached.
+ForceSight is a proactive computer vision and predictive crowd stress simulation system engineered to eliminate crowd surges, stampedes, and crushing incidents at structural bottlenecks (gates, barricades, turnstiles, and narrow passageways). It pioneers a **Digital Photoelastic Simulation**—using OpenCV optical flow and crowd density analytics to mimic how physical stress alters chromatic fringes in photoelastic materials under polarized light. The crowd video actively shifts colors (blue ➔ yellow ➔ deep red) in high-stress zones, quantifying localized crush risk through a standardized **Peak Stress Index (0 to 100)** so security marshals have an indisputable, glanceable early-warning dashboard to throttle ingress before dangerous thresholds are reached.
 
 ## Core Value
 
-Making invisible crowd compressive force visible in real time to give security personnel indisputable, early-warning justification to throttle or divert crowds before dangerous crushes develop.
+Making invisible crowd stress visible in real time through a Digital Photoelastic Heatmap and Peak Stress Index (0–100), giving security marshals indisputable, early-warning visual justification to throttle or divert crowds before dangerous physical crushes develop.
 
 ## Requirements
 
@@ -17,14 +17,16 @@ Making invisible crowd compressive force visible in real time to give security p
 ### Active
 
 - [ ] Ingest and process local benchmark video files (crowd test footage) frame-by-frame
-- [ ] Run computer vision model to detect crowd density and head counts across spatial grid regions
-- [ ] Compute mechanical compressive force metrics (kg / kg/m²) using empirical crowd physics equations
-- [ ] Render a real-time, color-coded force heatmap overlay on the video feed
-- [ ] Provide a glanceable operator dashboard with risk gauges (Safe, Warning, Critical)
-- [ ] Trigger audible and visual throttle alerts when force approaches critical safety thresholds (e.g. >250 kg)
+- [ ] Run computer vision model (YOLO / head detection) to extract crowd density and spatial occupancy
+- [ ] Calculate inter-frame motion vectors and velocity turbulence using OpenCV optical flow
+- [ ] Compute the **Peak Stress Index (PSI: 0–100)** combining density and optical flow kinetic energy
+- [ ] Render a real-time **Digital Photoelastic Heatmap Overlay** that dynamically shifts chromatic fringes (cool blue ➔ yellow ➔ deep crimson) over high-stress regions
+- [ ] Provide a glanceable operator dashboard with PSI risk gauges (Nominal 0–49, Warning 50–74, Critical 75–100)
+- [ ] Trigger high-contrast visual alert banners with concrete gate-throttling recommendations when PSI exceeds safety thresholds
 
 ### Out of Scope
 
+- Hardware load-cell pressure simulation / kg measurements — replaced by pure computer vision Peak Stress Index (0–100)
 - Live multi-camera RTSP / CCTV hardware streaming — deferred to pilot field trial phase (MVP uses local benchmark files)
 - Automated physical barrier/gate interlocking — safety requires human marshal in the loop
 - Mobile app / SMS push notifications — MVP is focused on a centralized gate marshal workstation
@@ -32,22 +34,24 @@ Making invisible crowd compressive force visible in real time to give security p
 ## Context
 
 - **Team & Institution**: Developed by Bandi Sidhartha Reddy (Lead Developer) and Pavan Sai, Department of Computer Science and Engineering, VNR Vignana Jyothi Institute of Engineering and Technology (VNRVJIET), Hyderabad.
-- **Problem Space**: At densities exceeding 4–5 people/m², crowd compressive force transfers mechanically across bodies like a shockwave. People at the front can experience fatal compressive asphyxia at loads upwards of 250–400 kg while the crowd appears calm on the periphery.
+- **Problem Space**: At densities exceeding 4–5 people/m², crowd compressive force transfers mechanically across bodies like a shockwave. Compressive asphyxia occurs rapidly while the crowd appears calm on the periphery.
 - **Primary Persona**: Karthik Reddy, 32-year-old security guard managing main entry gates at large events (college fests, sports events, concerts, and temple gatherings).
+- **Scientific Analogy**: Digital Photoelasticity — photoelastic materials display colorful fringe bands under mechanical stress when viewed through polarized filters. ForceSight translates crowd density and optical flow velocity gradients into continuous chromatic stress fields directly on the video feed.
 
 ## Constraints
 
-- **Input Modality**: Local pre-recorded benchmark video files — isolates algorithm evaluation from camera streaming infrastructure
-- **Modeling**: CV head/density detection combined with empirical crowd mechanics formulas
-- **Interface**: Web dashboard (e.g., Streamlit / React + Python backend) for real-time visualization
+- **Input Modality**: Local pre-recorded benchmark video files (.mp4/.avi)
+- **Modeling**: OpenCV Farnebäck / Lucas-Kanade optical flow + spatial density mapping feeding the 0–100 Peak Stress Index
+- **Visuals**: Continuous photoelastic chromatic gradient (blue ➔ yellow ➔ deep red) blended onto video frames (no crude bounding boxes)
+- **Interface**: Web dashboard (Streamlit) for real-time visualization
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Local video benchmark input | Eliminates external streaming complexity for MVP; standardizes testing against known crowd scenarios | — Pending |
-| CV density + crowd physics force equation | Provides explainable, metric-driven mechanical pressure (kg) grounded in empirical human crowd dynamics | — Pending |
-| Glanceable web dashboard with visual gauges | Gives gate marshals instant, unambiguous justification to throttle gates without second-guessing | — Pending |
+| Peak Stress Index (0–100) over kg pressure | Eliminates arbitrary/unverifiable load cell kg claims; provides an intuitive, normalized 0–100 safety scale | ✓ Good |
+| Digital Photoelastic Simulation | Directly mimics physical stress birefringence (blue ➔ yellow ➔ crimson), providing an organic, glanceable visualization of stress shockwaves | ✓ Good |
+| OpenCV Optical Flow + Density | Combines spatial compression (density) with kinetic agitation (velocity variance) to detect turbulent crowd shockwaves | ✓ Good |
 
 ## Evolution
 
@@ -67,4 +71,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: October 27, 2026 after initialization*
+*Last updated: October 27, 2026 after initialization (Photoelastic Simulation pivot)*
