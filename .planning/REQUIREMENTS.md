@@ -26,9 +26,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Photoelastic Heatmap Overlay
 
-- [ ] **PHOTO-01**: System maps the continuous 2D stress field to a photoelastic chromatic spectrum (cool blue ➔ yellow ➔ deep crimson) mimicking polarized stress birefringence
-- [ ] **PHOTO-02**: System blends the photoelastic chromatic fringes over the raw crowd footage with calibrated alpha transparency, keeping individuals visible beneath the stress field
-- [ ] **PHOTO-03**: System highlights localized stress peak contours/hotspots where bottleneck compression is highest
+- [x] **PHOTO-01**: System maps the continuous 2D stress field to a photoelastic chromatic spectrum (cool blue ➔ yellow ➔ deep crimson) mimicking polarized stress birefringence
+- [x] **PHOTO-02**: System blends the photoelastic chromatic fringes over the raw crowd footage with calibrated alpha transparency, keeping individuals visible beneath the stress field
+- [x] **PHOTO-03**: System highlights localized stress peak contours/hotspots where bottleneck compression is highest
 
 ### Marshal Dashboard & Early-Warning Alerts
 

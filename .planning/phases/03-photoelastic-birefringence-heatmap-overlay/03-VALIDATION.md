@@ -1,9 +1,9 @@
 ---
 phase: "3"
 slug: "photoelastic-birefringence-heatmap-overlay"
-status: draft
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-10-27"
 ---
 
@@ -38,10 +38,10 @@ created: "2026-10-27"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | PHOTO-01 | — | 3-stop perceptual chromatic LUT generation & field colorization | unit | `python -m pytest tests/test_visualization.py -k test_colormap -q` | ❌ W0 | ⬜ pending |
-| 03-01-02 | 01 | 1 | PHOTO-01 | — | Bicubic upsampling and edge softening | unit | `python -m pytest tests/test_visualization.py -k test_upsampling -q` | ❌ W0 | ⬜ pending |
-| 03-02-01 | 02 | 2 | PHOTO-02 | — | Stress-weighted adaptive alpha blending over video frames | unit | `python -m pytest tests/test_visualization.py -k test_alpha_blending -q` | ❌ W0 | ⬜ pending |
-| 03-02-02 | 02 | 2 | PHOTO-03 | — | Hotspot bloom glow and iso-stress contour lines | unit | `python -m pytest tests/test_visualization.py -k test_hotspot_overlay -q` | ❌ W0 | ⬜ pending |
+| 03-01-01 | 01 | 1 | PHOTO-01 | — | 3-stop perceptual chromatic LUT generation & field colorization | unit | `python -m pytest tests/test_visualization.py -k test_colormap -q` | ✅ | ✅ green |
+| 03-01-02 | 01 | 1 | PHOTO-01 | — | Bicubic upsampling and edge softening | unit | `python -m pytest tests/test_visualization.py -k test_upsampling -q` | ✅ | ✅ green |
+| 03-02-01 | 02 | 2 | PHOTO-02 | — | Stress-weighted adaptive alpha blending over video frames | unit | `python -m pytest tests/test_visualization.py -k test_alpha_blending -q` | ✅ | ✅ green |
+| 03-02-02 | 02 | 2 | PHOTO-03 | — | Hotspot bloom glow and iso-stress contour lines | unit | `python -m pytest tests/test_visualization.py -k test_hotspot_overlay -q` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,7 +49,7 @@ created: "2026-10-27"
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_visualization.py` — unit tests for colormap, upsampler, alpha blender, and contour bloom renderer
+- [x] `tests/test_visualization.py` — unit tests for colormap, upsampler, alpha blender, and contour bloom renderer
 
 ---
 
@@ -63,11 +63,11 @@ created: "2026-10-27"
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 5s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 5s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated (31 of 31 tests green)

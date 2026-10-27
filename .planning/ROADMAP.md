@@ -59,8 +59,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Photoelastic chromatic colormap generator and continuous field interpolator
-- [ ] 03-02: Real-time alpha blending and contour hotspot visualizer
+- [x] 03-01: Photoelastic chromatic colormap generator and continuous field interpolator
+- [x] 03-02: Real-time alpha blending and contour hotspot visualizer
 
 ### Phase 4: Marshal Early-Warning Dashboard & Alert System
 **Goal**: Build the interactive Streamlit operator dashboard featuring real-time photoelastic video playback, PSI gauge, rolling stress charts, and actionable gate-throttling advisories.
