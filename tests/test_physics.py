@@ -181,3 +181,142 @@ def test_stress_stagnation_elevates_packed_crowd(dummy_flow: FlowVectors):
 
     # w_density (30) * 0.8 + w_stagnation (10) * 0.9 * 0.8 = 24 + 7.2 = 31.2
     assert result.instantaneous_psi >= 30.0
+
+
+# ============================================================================
+# Plan 02-02 Task 1 & 2: Asymmetric EMA and Hysteresis State Machine Tests
+# ============================================================================
+
+from src.config import RiskConfig, SmoothingConfig
+from src.physics.risk_state import AsymmetricEMA, RiskLevel, RiskStateMachine, RiskStateResult
+
+
+def test_asymmetric_ema_attack_vs_decay():
+    """EMA must rise rapidly (alpha=0.35) and cool down slowly (alpha=0.10)."""
+    ema = AsymmetricEMA(SmoothingConfig(alpha_rise=0.35, alpha_fall=0.10))
+
+    # Initial state
+    assert ema.update(0.0) == 0.0
+
+    # Step up from 0 to 100: fast attack
+    # After 5 steps of 100 with alpha=0.35:
+    # step 1: 35.0
+    # step 2: 0.35*100 + 0.65*35 = 57.75
+    # step 3: 0.35*100 + 0.65*57.75 = 72.54
+    # step 4: 82.15
+    # step 5: 88.40
+    val = 0.0
+    for _ in range(5):
+        val = ema.update(100.0)
+    assert val > 80.0, f"Expected fast attack > 80.0 within 5 steps, got {val}"
+
+    # Now step down to 0: slow decay
+    # With alpha=0.10, decay is much slower (1 - 0.10)^5 = 0.59 (still ~50+)
+    for _ in range(5):
+        val = ema.update(0.0)
+    assert val > 45.0, f"Expected slow decay to hold > 45.0 after 5 steps, got {val}"
+
+    # Even after 10 steps, should still be > 25.0
+    for _ in range(5):
+        val = ema.update(0.0)
+    assert val > 25.0, f"Expected slow decay to hold > 25.0 after 10 steps, got {val}"
+
+
+def test_asymmetric_ema_map_smoothing():
+    """EMA map smoothing must preserve 2D shapes and smooth arrays asymmetrically."""
+    ema = AsymmetricEMA()
+    initial_map = np.zeros((10, 10), dtype=np.float32)
+    s1 = ema.update_map(initial_map)
+    assert s1.shape == (10, 10)
+    assert np.all(s1 == 0.0)
+
+    target_map = np.full((10, 10), 100.0, dtype=np.float32)
+    s2 = ema.update_map(target_map)
+    # Fast attack should bring it to 35.0
+    assert np.allclose(s2, 35.0, atol=1e-3)
+
+
+def test_hysteresis_immediate_escalation():
+    """Jumping PSI above thresholds must immediately escalate without delay."""
+    sm = RiskStateMachine()
+
+    # Nominal baseline
+    res = sm.process(10.0)
+    assert res.level == RiskLevel.NOMINAL
+    assert res.action_recommended == "NORMAL_FLOW"
+
+    # Sudden surge to 80 (smoothed will be 0.35*80 + 0.65*10 = 34.5 on first step, then climbs)
+    # Let's push high enough so smoothed exceeds 50 then 75
+    for _ in range(4):
+        res = sm.process(95.0)
+
+    assert res.smoothed_psi >= 75.0
+    assert res.level == RiskLevel.CRITICAL
+    assert res.action_recommended == "HALT_INGRESS"
+
+
+def test_hysteresis_debouncing_prevents_premature_deescalation():
+    """State machine must not drop from CRITICAL to WARNING without sustained recovery."""
+    sm = RiskStateMachine(
+        risk_config=RiskConfig(
+            warning_threshold=50.0,
+            critical_threshold=75.0,
+            hysteresis_buffer=5.0,
+            deescalation_frames=15,
+        ),
+        smoothing_config=SmoothingConfig(alpha_rise=1.0, alpha_fall=1.0),  # passthrough for exact testing
+    )
+
+    # Force into CRITICAL
+    res = sm.process(80.0)
+    assert res.level == RiskLevel.CRITICAL
+
+    # PSI drops to 68.0 (below 70.0 recovery threshold) for 10 frames
+    for _ in range(10):
+        res = sm.process(68.0)
+        assert res.level == RiskLevel.CRITICAL
+        assert res.in_hysteresis is True
+        assert res.hold_counter > 0
+
+    # A single spike back above 70.0 resets the counter
+    res = sm.process(72.0)
+    assert res.level == RiskLevel.CRITICAL
+    assert res.hold_counter == 0
+
+    # Now drop below 70.0 for 15 consecutive frames
+    for _ in range(15):
+        res = sm.process(68.0)
+
+    assert res.level == RiskLevel.WARNING
+    assert res.action_recommended == "THROTTLE_GATES"
+
+
+def test_hysteresis_warning_to_nominal_buffer():
+    """Oscillation in buffer range [45.0, 50.0) keeps WARNING until sustained drop below 45.0."""
+    sm = RiskStateMachine(
+        risk_config=RiskConfig(
+            warning_threshold=50.0,
+            critical_threshold=75.0,
+            hysteresis_buffer=5.0,
+            deescalation_frames=15,
+        ),
+        smoothing_config=SmoothingConfig(alpha_rise=1.0, alpha_fall=1.0),
+    )
+
+    # Enter Warning
+    res = sm.process(55.0)
+    assert res.level == RiskLevel.WARNING
+
+    # Hover at 47.0 (below warning 50.0, but NOT below recovery 45.0)
+    for _ in range(30):
+        res = sm.process(47.0)
+        assert res.level == RiskLevel.WARNING
+        assert res.in_hysteresis is True
+        assert res.hold_counter == 0  # not below recovery target
+
+    # Drop to 40.0 (below 45.0 recovery target) for 15 frames
+    for _ in range(15):
+        res = sm.process(40.0)
+
+    assert res.level == RiskLevel.NOMINAL
+    assert res.action_recommended == "NORMAL_FLOW"
