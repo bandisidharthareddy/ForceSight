@@ -90,11 +90,11 @@ Plans:
   1. Automated test suite validates video ingestion, optical flow extraction, PSI math, and alert thresholds.
   2. End-to-end evaluation runs against benchmark crowd clips, confirming timely alert triggering prior to maximum crush density.
   3. Demonstration scripts, sample video guidelines, and documentation are complete for operator deployment.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Automated unit and integration test suite
-- [ ] 05-02: Benchmark evaluation and operator demonstration pack
+- [ ] 05-01: Multi-scenario benchmark suite and throughput profiler CLI
+- [ ] 05-02: False-alarm verification, edge-case hardening, and final verification
 
 ## Progress
 
@@ -104,7 +104,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Video Ingestion & Dense Optical Flow Core | 2/2 | Complete | 2026-10-27 |
-| 2. Digital Photoelastic Simulation & Peak Stress Index (PSI) | 0/2 | Not started | - |
-| 3. Photoelastic Birefringence Heatmap Overlay | 0/2 | Not started | - |
-| 4. Marshal Early-Warning Dashboard & Alert System | 0/2 | Not started | - |
-| 5. Benchmark Evaluation & System Hardening | 0/2 | Not started | - |
+| 2. Digital Photoelastic Simulation & Peak Stress Index (PSI) | 2/2 | Complete | 2026-10-27 |
+| 3. Photoelastic Birefringence Heatmap Overlay | 2/2 | Complete | 2026-10-27 |
+| 4. Marshal Early-Warning Dashboard & Alert System | 2/2 | Complete | 2026-10-27 |
+| 5. Benchmark Evaluation & System Hardening | 0/2 | In progress | - |
