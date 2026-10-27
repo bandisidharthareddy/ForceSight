@@ -24,11 +24,11 @@ ForceSight makes invisible crowd pressure visible through Digital Photoelastic S
   1. System loads and decodes local crowd video benchmark files (.mp4/.avi) frame-by-frame with play/pause/loop controls.
   2. OpenCV dense optical flow (Farnebäck) computes motion vectors and displacement magnitudes across consecutive frames.
   3. Spatial grid occupancy detects crowd density and identifies localized stagnation or turbulence zones.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Video ingestion loader and frame stream generator
-- [ ] 01-02: Dense optical flow tracking and velocity variance extractor
+- [ ] 01-01: Video ingestion loader and synthetic crowd benchmark generator
+- [ ] 01-02: Farnebäck dense optical flow tracking and velocity turbulence extraction
 
 ### Phase 2: Digital Photoelastic Simulation & Peak Stress Index (PSI)
 **Goal**: Formulate and implement the Digital Photoelastic stress engine, coupling density with velocity turbulence to generate the 0–100 Peak Stress Index.
@@ -103,7 +103,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Video Ingestion & Dense Optical Flow Core | 0/2 | Not started | - |
+| 1. Video Ingestion & Dense Optical Flow Core | 0/2 | Ready to execute | - |
 | 2. Digital Photoelastic Simulation & Peak Stress Index (PSI) | 0/2 | Not started | - |
 | 3. Photoelastic Birefringence Heatmap Overlay | 0/2 | Not started | - |
 | 4. Marshal Early-Warning Dashboard & Alert System | 0/2 | Not started | - |
