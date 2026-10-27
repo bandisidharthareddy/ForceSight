@@ -40,11 +40,11 @@ Plans:
   1. System computes the normalized Peak Stress Index (0 to 100) combining localized density with optical flow velocity variance.
   2. Temporal exponential moving average (EMA) smoothing stabilizes the index against single-frame transient noise.
   3. Risk classification engine categorizes stress into Nominal (0–49), Warning (50–74), and Critical (75–100) operating regimes.
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Peak Stress Index mathematical engine and density-velocity coupling
-- [ ] 02-02: Temporal EMA smoothing and 3-tier risk classification state machine
+- [ ] 02-01: Spatial density estimator and coupled Helbing stress field engine
+- [ ] 02-02: Asymmetric EMA temporal smoothing and hysteresis state machine
 
 ### Phase 3: Photoelastic Birefringence Heatmap Overlay
 **Goal**: Render real-time chromatic stress fringes (blue ➔ yellow ➔ deep crimson) directly over crowd footage mimicking photoelastic materials under polarized stress.
