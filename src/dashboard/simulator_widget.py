@@ -1,18 +1,21 @@
 """Ultra-realistic, high-performance HTML5 Canvas & WebGL interactive crowd simulator widget.
 
 Features:
-- REALISTIC INFLOW QUEUE & INGRESS: New people continuously pour into the venue through entry doors at an adjustable inflow rate.
-- REAL EXITS & DISCHARGE FLOW: Particles exit smoothly through configurable exit gates and despawn once evacuated.
-- TRUE PHYSICAL CROWD STAMPEDE DYNAMICS:
-  - If inflow > exit discharge capacity, room fills up, density saturates, and pressure climbs.
-  - When exits are throttled or locked, panic and aggressive shoving occur, creating high compressive forces and deadly wall crushing.
-- INTERACTIVE OBSTACLES (PILLARS): Click anywhere to place or drag pillars to test whether they act as a boon (deflecting crush force) or a curse (jamming flow).
-- ADJUSTABLE EXIT SIZE: Live slider to widen or narrow the gate bottleneck width.
-- SECTOR GRID PINPOINTING: Real-time localization (e.g. Sector C4) tagging high-stress zones.
-- AUDIO SIREN ALARM & GUARD DISPATCH: Dynamic siren alerting security marshals with tagged location.
+- REALISTIC INITIATION OF PANIC & STAMPEDE:
+  - Surges / stampedes do NOT artificially start at the wall. They ignite from localized distress/panic epicenters anywhere in the room (e.g. fire, loud noise, fallen person, emergency incident).
+  - Can spawn panic incident points anywhere by clicking or hitting "Trigger Panic Incident", or incidents randomly erupt if density exceeds critical mass.
+  - Social Contagion / Wave Propagation: When a distress epicenter ignites, panic radiates outwards to nearby people. Panicked people shove, run faster, and flee away from danger toward exits, triggering true emergent stampede dynamics!
+- CONTINUOUS INFLOW & OUTFLOW:
+  - People naturally enter through entry doors on left, walk and navigate around obstacles, and escape through exit gates on right.
+- CUSTOM DRAGGABLE/CLICKABLE PILLARS ANYWHERE:
+  - Click anywhere on the floor to place or remove deflection pillars. Drag or place them in front of exits, near walls, or in the center.
+- PHYSICAL MULTI-AGENT COMPRESSION & WALL CRUSHING:
+  - Compressive forces accumulate only where people actually collide, get pinned against walls, or choke at exits.
+- SECTOR GRID PINPOINTING & AUDIO SIREN:
+  - Localized coordinate tracking (Sector A1-D5) with real Web Audio API alarm.
 """
 
-def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> str:
+def get_simulator_html(initial_particles: int = 160, initial_fps: int = 60) -> str:
     """Generate standalone self-contained high-performance simulator HTML component."""
     return f"""
     <!DOCTYPE html>
@@ -142,7 +145,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
             }}
             .main-content {{
                 display: grid;
-                grid-template-columns: 1fr 330px;
+                grid-template-columns: 1fr 340px;
                 gap: 14px;
             }}
             @media (max-width: 1020px) {{
@@ -173,7 +176,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 font-family: 'JetBrains Mono', monospace;
                 font-size: 11px;
                 color: rgba(255, 255, 255, 0.85);
-                background: rgba(3, 7, 18, 0.7);
+                background: rgba(3, 7, 18, 0.75);
                 padding: 6px 12px;
                 border-radius: 6px;
                 backdrop-filter: blur(8px);
@@ -182,14 +185,39 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 gap: 12px;
                 flex-wrap: wrap;
             }}
+            .mode-switch-bar {{
+                position: absolute;
+                top: 10px;
+                right: 12px;
+                display: flex;
+                gap: 6px;
+                z-index: 10;
+            }}
+            .mode-btn {{
+                background: rgba(15, 23, 42, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: #94A3B8;
+                font-size: 11px;
+                padding: 4px 10px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }}
+            .mode-btn.active {{
+                background: #00E5FF;
+                color: #030712;
+                font-weight: 700;
+                border-color: #00E5FF;
+                box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+            }}
             .canvas-helper-tip {{
                 position: absolute;
                 bottom: 10px;
                 left: 12px;
                 pointer-events: none;
                 font-size: 11px;
-                color: rgba(148, 163, 184, 0.85);
-                background: rgba(3, 7, 18, 0.65);
+                color: rgba(148, 163, 184, 0.9);
+                background: rgba(3, 7, 18, 0.7);
                 padding: 5px 12px;
                 border-radius: 4px;
                 backdrop-filter: blur(6px);
@@ -301,12 +329,12 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
             }}
             button.btn-action.danger {{
                 border-color: rgba(239, 68, 68, 0.4);
-                background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(153, 27, 27, 0.4) 100%);
+                background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(153, 27, 27, 0.45) 100%);
             }}
             button.btn-action.danger:hover {{
                 border-color: #EF4444;
                 color: #FCA5A5;
-                box-shadow: 0 0 14px rgba(239, 68, 68, 0.45);
+                box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
             }}
             .slider-row {{
                 display: flex;
@@ -330,7 +358,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
             }}
             .mini-chart-canvas {{
                 width: 100%;
-                height: 50px;
+                height: 48px;
                 display: block;
             }}
             .guard-dispatch-card {{
@@ -352,8 +380,8 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 <div class="brand">
                     <div class="brand-badge">⚡</div>
                     <div>
-                        <div class="brand-title">ForceSight — Venue Crowd Surge & Evacuation Simulator</div>
-                        <div class="brand-sub">Physical Continuous Inflow ➔ Stampede Chokepoint ➔ Exit Clearance</div>
+                        <div class="brand-title">ForceSight — Emergent Crowd Surge & Stampede Simulator</div>
+                        <div class="brand-sub">Random Incident Seed ➔ Panic Social Contagion ➔ Chokepoint Stampede</div>
                     </div>
                 </div>
                 <div class="top-actions">
@@ -372,13 +400,20 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     <canvas id="simCanvas"></canvas>
                     <div class="hud-overlay" id="hud">
                         <span>FPS: <strong id="fpsVal">60</strong></span>
-                        <span>VENUE OCCUPANCY: <strong id="agentCountVal" style="color: #00E5FF;">150</strong></span>
+                        <span>OCCUPANCY: <strong id="agentCountVal" style="color: #00E5FF;">160</strong></span>
                         <span>EVACUATED: <strong id="evacCountVal" style="color: #10B981;">0</strong></span>
-                        <span>EXIT GATE: <strong id="gateStateText" style="color: #00E5FF;">OPEN (110px)</strong></span>
-                        <span>PEAK SECTOR: <strong id="peakSectorHud" style="color: #FCD34D;">C4</strong></span>
+                        <span>EXIT: <strong id="gateStateText" style="color: #00E5FF;">OPEN (110px)</strong></span>
+                        <span>PEAK HOTSPOT: <strong id="peakSectorHud" style="color: #FCD34D;">C4</strong></span>
                     </div>
-                    <div class="canvas-helper-tip">
-                        💡 <strong>Interactive Arena</strong>: Click anywhere to drop deflecting <strong>Pillars</strong> (boon or barrier). Click a pillar to remove it. Watch people enter on left and exit on right!
+
+                    <!-- Mode Toggle Tool on Canvas -->
+                    <div class="mode-switch-bar">
+                        <button id="toolPillar" class="mode-btn active">🏛️ Place Pillar</button>
+                        <button id="toolPanic" class="mode-btn">🔥 Click to Ignite Panic</button>
+                    </div>
+
+                    <div class="canvas-helper-tip" id="helperTip">
+                        💡 <strong>Interactive Arena</strong>: Click anywhere to place or remove a <strong>Pillar</strong>. Switch to "Ignite Panic" to trigger a surprise incident in any part of the room!
                     </div>
                 </div>
 
@@ -414,21 +449,30 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                         </div>
                     </div>
 
-                    <!-- Obstacles & Gate Control Panel -->
+                    <!-- Incident & Chokepoint Controls -->
                     <div class="card">
-                        <div class="card-title">PHYSICS & EXIT CONTROLS</div>
+                        <div class="card-title">SURGE & INCIDENT GENERATOR</div>
                         <div class="controls-panel">
+                            <button id="btnRandomIncident" class="btn-action danger">🔥 Random Panic Incident</button>
                             <button id="btnToggleGate" class="btn-action">🚪 Lock Exit Gate</button>
-                            <button id="btnSurge" class="btn-action danger">⚡ Trigger Inrush Stampede</button>
-                            <button id="btnAddPillars" class="btn-action">🏛️ Add Deflection Columns</button>
+                            <button id="btnCalmDown" class="btn-action">🕊️ Restore Calm</button>
                             <button id="btnClearPillars" class="btn-action">🧹 Clear Pillars</button>
+                        </div>
+
+                        <!-- Panic Contagion Radius -->
+                        <div class="slider-row">
+                            <div class="slider-label">
+                                <span>Panic Contagion Spread Speed</span>
+                                <span id="contagionLabel">1.5x</span>
+                            </div>
+                            <input type="range" id="contagionSlider" min="0.5" max="3.0" step="0.1" value="1.5">
                         </div>
 
                         <!-- Inflow Rate Slider -->
                         <div class="slider-row">
                             <div class="slider-label">
                                 <span>Entry Inflow Rate (Arrivals/sec)</span>
-                                <span id="inflowLabel">4 people/s</span>
+                                <span id="inflowLabel">4 arrivals/s</span>
                             </div>
                             <input type="range" id="inflowSlider" min="0" max="15" step="1" value="4">
                         </div>
@@ -436,19 +480,10 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                         <!-- Exit Bottleneck Size Slider -->
                         <div class="slider-row">
                             <div class="slider-label">
-                                <span>Exit Bottleneck Width</span>
-                                <span id="gateWidthLabel">110 px (Normal)</span>
+                                <span>Exit Chokepoint Width</span>
+                                <span id="gateWidthLabel">110 px</span>
                             </div>
                             <input type="range" id="gateWidthSlider" min="20" max="220" step="10" value="110">
-                        </div>
-
-                        <!-- Panic Push Velocity -->
-                        <div class="slider-row">
-                            <div class="slider-label">
-                                <span>Crowd Panic Push Force</span>
-                                <span id="speedLabel">1.2x (Normal)</span>
-                            </div>
-                            <input type="range" id="speedSlider" min="0.6" max="2.8" step="0.1" value="1.2">
                         </div>
 
                         <!-- Wall Crushing Friction -->
@@ -546,7 +581,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 canvas.width = box.clientWidth;
                 canvas.height = box.clientHeight;
                 mCanvas.width = mCanvas.parentElement.clientWidth - 28;
-                mCanvas.height = 50;
+                mCanvas.height = 48;
             }}
             window.addEventListener('resize', resizeCanvases);
             resizeCanvases();
@@ -555,8 +590,8 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
             let isRunning = true;
             let gateLocked = false;
             let exitGateWidth = 110;
-            let inflowRatePerSec = 4; // Arrivals per second
-            let speedMult = 1.2;
+            let inflowRatePerSec = 4;
+            let contagionSpeed = 1.5;
             let wallFriction = 1.6;
             let smoothedPsi = 18.0;
             let lastTime = performance.now();
@@ -564,15 +599,19 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
             let fps = 60;
             let totalEvacuated = 0;
             let spawnAccumulator = 0;
+            let clickMode = 'pillar'; // 'pillar' or 'panic'
             const historyPsi = [];
 
             // Sectors Configuration: 4 Rows (A, B, C, D) x 5 Columns (1, 2, 3, 4, 5)
             const sectorRows = ['A', 'B', 'C', 'D'];
             const sectorCols = [1, 2, 3, 4, 5];
 
-            // Obstacles / Pillars (Circular deflecting columns)
+            // Incident Distress Epicenters (Random point incidents that trigger panic)
+            let panicIncidents = [];
+
+            // Obstacles / Deflection Pillars
             let obstacles = [
-                {{ x: 0, y: 0, r: 24 }} // Initial deflecting column
+                {{ x: 0, y: 0, r: 24 }}
             ];
 
             function repositionInitialObstacles() {{
@@ -581,7 +620,26 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
             }}
             repositionInitialObstacles();
 
-            // Click to Place / Remove Obstacles
+            // Click Mode Switchers
+            const toolPillar = document.getElementById('toolPillar');
+            const toolPanic = document.getElementById('toolPanic');
+            const helperTip = document.getElementById('helperTip');
+
+            toolPillar.onclick = () => {{
+                clickMode = 'pillar';
+                toolPillar.className = 'mode-btn active';
+                toolPanic.className = 'mode-btn';
+                helperTip.innerHTML = '💡 <strong>Pillar Tool</strong>: Click anywhere on the floor to drop or remove a deflection pillar.';
+            }};
+
+            toolPanic.onclick = () => {{
+                clickMode = 'panic';
+                toolPanic.className = 'mode-btn active';
+                toolPillar.className = 'mode-btn';
+                helperTip.innerHTML = '🔥 <strong>Panic Tool</strong>: Click ANYWHERE inside the crowd to ignite a sudden incident/distress epicenter!';
+            }};
+
+            // Canvas Click Handler
             canvas.addEventListener('click', (e) => {{
                 initAudio();
                 const rect = canvas.getBoundingClientRect();
@@ -590,22 +648,37 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 const clickX = (e.clientX - rect.left) * scaleX;
                 const clickY = (e.clientY - rect.top) * scaleY;
 
-                // Check if clicking existing obstacle to delete
-                let removed = false;
-                for (let i = 0; i < obstacles.length; i++) {{
-                    if (Math.hypot(clickX - obstacles[i].x, clickY - obstacles[i].y) < obstacles[i].r + 10) {{
-                        obstacles.splice(i, 1);
-                        removed = true;
-                        break;
+                if (clickMode === 'pillar') {{
+                    // Add or remove pillar
+                    let removed = false;
+                    for (let i = 0; i < obstacles.length; i++) {{
+                        if (Math.hypot(clickX - obstacles[i].x, clickY - obstacles[i].y) < obstacles[i].r + 10) {{
+                            obstacles.splice(i, 1);
+                            removed = true;
+                            break;
+                        }}
                     }}
-                }}
-                if (!removed) {{
-                    // Place new pillar
-                    obstacles.push({{ x: clickX, y: clickY, r: 22 }});
+                    if (!removed) {{
+                        obstacles.push({{ x: clickX, y: clickY, r: 22 }});
+                    }}
+                }} else if (clickMode === 'panic') {{
+                    // Spawn panic epicenter at exact clicked location
+                    triggerIncidentAt(clickX, clickY, 180);
                 }}
             }});
 
-            // Particle Class: Spawn at Entry Doors on Left, Escape at Exit on Right
+            function triggerIncidentAt(x, y, radius = 180) {{
+                panicIncidents.push({{
+                    x: x,
+                    y: y,
+                    maxRadius: radius,
+                    currentRadius: 10,
+                    age: 0,
+                    life: 240 // 4 seconds
+                }});
+            }}
+
+            // Particle Class: Each person has a natural state and a PANIC state
             class Person {{
                 constructor(w, h, startRandom = false) {{
                     const wallUpperY = h * 0.12;
@@ -613,20 +686,19 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     const gateX = w * 0.78;
 
                     if (startRandom) {{
-                        // Pre-populate chamber
                         this.x = Math.random() * (gateX * 0.8) + 30;
                         this.y = wallUpperY + 15 + Math.random() * (wallLowerY - wallUpperY - 30);
                     }} else {{
-                        // Spawn at entry doors on left
                         this.x = -15 - Math.random() * 40;
                         this.y = wallUpperY + 20 + Math.random() * (wallLowerY - wallUpperY - 40);
                     }}
 
-                    this.baseSpeed = 2.0 + Math.random() * 1.5;
+                    this.baseSpeed = 1.9 + Math.random() * 1.4;
                     this.vx = this.baseSpeed;
                     this.vy = 0;
                     this.radius = 7.5 + Math.random() * 3.0;
-                    this.evacuated = false;
+                    this.panicLevel = 0.0; // 0.0 = Calm, 1.0 = Terror/Stampede
+                    this.fleeAngle = 0.0;
                 }}
             }}
 
@@ -666,7 +738,27 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 return `rgba(${{Math.round(r)}}, ${{Math.round(g)}}, ${{Math.round(b)}}, ${{alpha}})`;
             }}
 
-            // Button Click Handlers
+            // Action Buttons
+            document.getElementById('btnRandomIncident').onclick = () => {{
+                initAudio();
+                const w = canvas.width;
+                const h = canvas.height;
+                const wallUpperY = h * 0.12;
+                const wallLowerY = h * 0.88;
+                // Random position across the arena floor
+                const randX = Math.random() * (w * 0.60) + (w * 0.15);
+                const randY = wallUpperY + 30 + Math.random() * (wallLowerY - wallUpperY - 60);
+                triggerIncidentAt(randX, randY, 220);
+            }};
+
+            document.getElementById('btnCalmDown').onclick = () => {{
+                panicIncidents = [];
+                for (let i = 0; i < people.length; i++) {{
+                    people[i].panicLevel = 0.0;
+                }}
+                stopSiren();
+            }};
+
             document.getElementById('btnToggleGate').onclick = () => {{
                 initAudio();
                 gateLocked = !gateLocked;
@@ -675,42 +767,19 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 document.getElementById('gateStateText').style.color = gateLocked ? '#FF3366' : '#00E5FF';
             }};
 
-            document.getElementById('btnSurge').onclick = () => {{
-                initAudio();
-                inflowRatePerSec = 14;
-                speedMult = 2.4;
-                gateLocked = false;
-                exitGateWidth = 50; // Narrow bottleneck
-                document.getElementById('inflowSlider').value = 14;
-                document.getElementById('inflowLabel').innerText = '14 people/s (STAMPEDE INFLOW)';
-                document.getElementById('speedSlider').value = 2.4;
-                document.getElementById('speedLabel').innerText = '2.4x (HIGH PANIC)';
-                document.getElementById('gateWidthSlider').value = 50;
-                document.getElementById('gateWidthLabel').innerText = '50 px (NARROW CHOKEPOINT)';
-                document.getElementById('gateStateText').innerText = 'CHOKEPOINT JAM (50px)';
-                document.getElementById('gateStateText').style.color = '#FFB300';
-            }};
-
-            document.getElementById('btnAddPillars').onclick = () => {{
-                initAudio();
-                const w = canvas.width;
-                const h = canvas.height;
-                obstacles = [
-                    {{ x: w * 0.40, y: h * 0.35, r: 24 }},
-                    {{ x: w * 0.40, y: h * 0.65, r: 24 }},
-                    {{ x: w * 0.65, y: h * 0.50, r: 26 }}
-                ];
-            }};
-
             document.getElementById('btnClearPillars').onclick = () => {{
-                initAudio();
                 obstacles = [];
             }};
 
             // Slider Listeners
+            document.getElementById('contagionSlider').oninput = (e) => {{
+                contagionSpeed = parseFloat(e.target.value);
+                document.getElementById('contagionLabel').innerText = `${{contagionSpeed.toFixed(1)}}x`;
+            }};
+
             document.getElementById('inflowSlider').oninput = (e) => {{
                 inflowRatePerSec = parseInt(e.target.value);
-                document.getElementById('inflowLabel').innerText = `${{inflowRatePerSec}} people/s`;
+                document.getElementById('inflowLabel').innerText = `${{inflowRatePerSec}} arrivals/s`;
             }};
 
             document.getElementById('gateWidthSlider').oninput = (e) => {{
@@ -719,11 +788,6 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                 if (!gateLocked) {{
                     document.getElementById('gateStateText').innerText = `OPEN (${{exitGateWidth}}px)`;
                 }}
-            }};
-
-            document.getElementById('speedSlider').oninput = (e) => {{
-                speedMult = parseFloat(e.target.value);
-                document.getElementById('speedLabel').innerText = `${{speedMult.toFixed(1)}}x`;
             }};
 
             document.getElementById('frictionSlider').oninput = (e) => {{
@@ -756,16 +820,39 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     const wallLowerY = h * 0.88;
 
                     // 1. Continuous Inflow Spawn Generator
-                    // Spawns new people at the left entry based on inflowRatePerSec
                     spawnAccumulator += (inflowRatePerSec / 60.0);
                     while (spawnAccumulator >= 1.0) {{
                         spawnAccumulator -= 1.0;
-                        if (people.length < 450) {{
+                        if (people.length < 480) {{
                             people.push(new Person(w, h, false));
                         }}
                     }}
 
-                    // Grid Accumulator
+                    // 2. Expand Panic Incidents & Contagion Waves
+                    for (let j = panicIncidents.length - 1; j >= 0; j--) {{
+                        const inc = panicIncidents[j];
+                        inc.age++;
+                        inc.currentRadius += (3.5 * contagionSpeed);
+
+                        // Contagion spread to people within wave radius
+                        for (let i = 0; i < people.length; i++) {{
+                            const p = people[i];
+                            const dist = Math.hypot(p.x - inc.x, p.y - inc.y);
+                            if (dist < inc.currentRadius) {{
+                                p.panicLevel = Math.min(1.0, p.panicLevel + 0.35 * contagionSpeed);
+                                // Compute flee vector AWAY from panic epicenter towards exit
+                                const awayX = (p.x - inc.x) / (dist + 0.1);
+                                const awayY = (p.y - inc.y) / (dist + 0.1);
+                                p.fleeAngle = Math.atan2(awayY, awayX);
+                            }}
+                        }}
+
+                        if (inc.currentRadius > inc.maxRadius || inc.age > inc.life) {{
+                            panicIncidents.splice(j, 1);
+                        }}
+                    }}
+
+                    // Grid Accumulator for Stress Field
                     const blockSize = 24;
                     const cols = Math.ceil(w / blockSize);
                     const rows = Math.ceil(h / blockSize);
@@ -773,17 +860,16 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     const gridVx = new Float32Array(cols * rows);
                     const gridVy = new Float32Array(cols * rows);
                     const gridWallPressure = new Float32Array(cols * rows);
+                    const gridPanic = new Float32Array(cols * rows);
 
-                    // 2. Advance Each Person through Physical Room
+                    // 3. Advance Each Person with Panic Forces & Physical Collisions
                     for (let i = people.length - 1; i >= 0; i--) {{
                         const p = people[i];
 
                         // Target Navigation:
-                        // Move towards exit gate opening (gateX, gateY)
                         let targetX = gateX;
                         let targetY = gateY;
 
-                        // Once safely past the exit gate, keep moving right to clear out!
                         if (p.x > gateX) {{
                             targetX = w + 80;
                             targetY = p.y;
@@ -791,14 +877,30 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
 
                         const dx = targetX - p.x;
                         const dy = targetY - p.y;
-                        const dist = Math.hypot(dx, dy) + 0.1;
-                        const desiredVx = (dx / dist) * p.baseSpeed * speedMult;
-                        const desiredVy = (dy / dist) * p.baseSpeed * speedMult;
+                        const distToExit = Math.hypot(dx, dy) + 0.1;
+
+                        // Desired velocity vector (Exit attraction)
+                        let desiredVx = (dx / distToExit) * p.baseSpeed;
+                        let desiredVy = (dy / distToExit) * p.baseSpeed;
+
+                        // Panic Social Force: In panic, speed increases up to 2.5x and pushing becomes aggressive!
+                        if (p.panicLevel > 0.1) {{
+                            const panicMultiplier = 1.0 + (p.panicLevel * 1.5);
+                            // Blend between fleeing epicenter and surging toward exit
+                            const fleeVx = Math.cos(p.fleeAngle) * p.baseSpeed * panicMultiplier;
+                            const fleeVy = Math.sin(p.fleeAngle) * p.baseSpeed * panicMultiplier;
+
+                            desiredVx = 0.6 * desiredVx * panicMultiplier + 0.4 * fleeVx;
+                            desiredVy = 0.6 * desiredVy * panicMultiplier + 0.4 * fleeVy;
+
+                            // Slow decay of panic if far from danger
+                            p.panicLevel = Math.max(0.0, p.panicLevel - 0.002);
+                        }}
 
                         p.vx += 0.22 * (desiredVx - p.vx);
                         p.vy += 0.22 * (desiredVy - p.vy);
 
-                        // Hard Contact with Deflection Columns / Obstacles
+                        // Pillar / Deflection Column Hard Collision
                         for (let o = 0; o < obstacles.length; o++) {{
                             const obst = obstacles[o];
                             const odx = p.x - obst.x;
@@ -822,11 +924,11 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                             }}
                         }}
 
-                        // Wall Collision (Top and Bottom Corridor Boundaries)
+                        // Wall Collision (Upper & Lower Boundaries)
                         if (p.y - p.radius < wallUpperY) {{
                             p.y = wallUpperY + p.radius;
-                            const pressurePush = Math.abs(p.vy) + 1.2 * wallFriction;
-                            p.vy = Math.abs(p.vy) * 0.25;
+                            const pressurePush = (Math.abs(p.vy) + 1.2) * (1.0 + p.panicLevel) * wallFriction;
+                            p.vy = Math.abs(p.vy) * 0.2;
                             p.vx *= Math.max(0.2, 1.0 - 0.25 * wallFriction);
 
                             const gx = Math.min(cols - 1, Math.max(0, Math.floor(p.x / blockSize)));
@@ -834,8 +936,8 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                             gridWallPressure[gy * cols + gx] += pressurePush;
                         }} else if (p.y + p.radius > wallLowerY) {{
                             p.y = wallLowerY - p.radius;
-                            const pressurePush = Math.abs(p.vy) + 1.2 * wallFriction;
-                            p.vy = -Math.abs(p.vy) * 0.25;
+                            const pressurePush = (Math.abs(p.vy) + 1.2) * (1.0 + p.panicLevel) * wallFriction;
+                            p.vy = -Math.abs(p.vy) * 0.2;
                             p.vx *= Math.max(0.2, 1.0 - 0.25 * wallFriction);
 
                             const gx = Math.min(cols - 1, Math.max(0, Math.floor(p.x / blockSize)));
@@ -843,34 +945,32 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                             gridWallPressure[gy * cols + gx] += pressurePush;
                         }}
 
-                        // Exit Barrier Wall Hard Collision
-                        // Solid wall everywhere EXCEPT inside the exit gate slot!
+                        // Exit Barrier Wall Collision
                         const isAtGateLine = p.x + p.radius >= gateX && p.x - p.radius <= gateX + 16;
                         const isOutsideGateOpening = Math.abs(p.y - gateY) > (effectiveGateWidth * 0.5 - 2);
 
                         if (isAtGateLine && isOutsideGateOpening) {{
                             p.x = gateX - p.radius;
-                            const contactPressure = Math.abs(p.vx) * 2.8 * wallFriction;
+                            const contactPressure = (Math.abs(p.vx) * 2.8 + 2.0) * (1.0 + p.panicLevel) * wallFriction;
                             p.vx = -Math.abs(p.vx) * 0.1;
-                            // High lateral shear & turbulent crush sliding
-                            p.vy += (Math.random() - 0.5) * (7.0 * speedMult);
+                            p.vy += (Math.random() - 0.5) * (7.0 * (1.0 + p.panicLevel));
 
                             const gx = Math.min(cols - 1, Math.max(0, Math.floor(p.x / blockSize)));
                             const gy = Math.min(rows - 1, Math.max(0, Math.floor(p.y / blockSize)));
                             gridWallPressure[gy * cols + gx] += contactPressure;
                         }}
 
-                        // Compression Funnel (Particles piling up behind exit chokepoint)
+                        // Compression Funnel (Jamming behind bottleneck)
                         if (p.x >= gateX - 220 && p.x <= gateX && isOutsideGateOpening) {{
                             p.vx *= 0.35;
-                            p.vy += (Math.random() - 0.5) * (6.5 * speedMult);
+                            p.vy += (Math.random() - 0.5) * (6.5 * (1.0 + p.panicLevel));
                         }}
 
                         // Integrate Position
                         p.x += p.vx;
                         p.y += p.vy;
 
-                        // Exit Clearance: When person reaches the far right, they have successfully evacuated!
+                        // Exit Clearance: Successfully evacuated!
                         if (p.x > w + 20) {{
                             people.splice(i, 1);
                             totalEvacuated++;
@@ -884,13 +984,14 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                         gridCount[gIdx]++;
                         gridVx[gIdx] += p.vx;
                         gridVy[gIdx] += p.vy;
+                        gridPanic[gIdx] += p.panicLevel;
                     }}
 
-                    // Update Evacuated & Occupancy HUD
+                    // Update HUD Numbers
                     document.getElementById('agentCountVal').innerText = people.length;
                     document.getElementById('evacCountVal').innerText = totalEvacuated;
 
-                    // 3. Evaluate Photoelastic Stress Field & Pinpoint Sector
+                    // 4. Evaluate Photoelastic Stress Field & Pinpoint Sector
                     let maxStress = 0;
                     let hotspotX = gateX - 40;
                     let hotspotY = gateY;
@@ -916,12 +1017,14 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                                 }}
                                 const varNorm = count > 0 ? Math.min(1.0, (variance / count) / 10.0) : 0;
                                 const coupled = rho * varNorm;
-
                                 const wallCrush = Math.min(1.0, gridWallPressure[idx] / 6.0);
-                                const isNearExit = Math.abs(gx * blockSize - gateX) < 140;
-                                const stag = isNearExit && (effectiveGateWidth < 60) ? 0.40 : 0.05;
+                                const cellPanic = count > 0 ? Math.min(1.0, gridPanic[idx] / count) : 0;
 
-                                const s = Math.min(100, (rho * 28 + varNorm * 22 + coupled * 30 + stag * 20 + wallCrush * 35) * 1.05);
+                                // Chokepoint stagnation factor
+                                const isNearExit = Math.abs(gx * blockSize - gateX) < 140;
+                                const stag = isNearExit && (effectiveGateWidth < 60) ? 0.35 : 0.05;
+
+                                const s = Math.min(100, (rho * 26 + varNorm * 22 + coupled * 28 + stag * 18 + wallCrush * 32 + cellPanic * 25) * 1.05);
                                 stressField[idx] = s;
                                 if (s > maxStress) {{
                                     maxStress = s;
@@ -947,7 +1050,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     // Update UI Telemetry & Audio Siren
                     updateTelemetry(smoothedPsi, peakSectorName);
 
-                    // 4. Render Polariscope Darkfield & Interference Fringes
+                    // 5. Render Polariscope Darkfield & Interference Fringes
                     ctx.clearRect(0, 0, w, h);
                     ctx.fillStyle = '#060B18';
                     ctx.fillRect(0, 0, w, h);
@@ -1010,6 +1113,21 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                         }}
                     }}
 
+                    // Draw Panic Incident Expanding Shockwaves
+                    for (let j = 0; j < panicIncidents.length; j++) {{
+                        const inc = panicIncidents[j];
+                        ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+                        ctx.lineWidth = 2.5;
+                        ctx.beginPath();
+                        ctx.arc(inc.x, inc.y, inc.currentRadius, 0, Math.PI * 2);
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#EF4444';
+                        ctx.beginPath();
+                        ctx.arc(inc.x, inc.y, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                    }}
+
                     // Iso-Stress Contour Rings
                     if (smoothedPsi > 42) {{
                         ctx.strokeStyle = smoothedPsi >= 75 ? 'rgba(255, 51, 102, 0.75)' : 'rgba(255, 179, 0, 0.65)';
@@ -1017,15 +1135,9 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                         ctx.beginPath();
                         ctx.ellipse(hotspotX, hotspotY, 68, 48, 0, 0, Math.PI * 2);
                         ctx.stroke();
-
-                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.ellipse(hotspotX, hotspotY, 105, 75, 0, 0, Math.PI * 2);
-                        ctx.stroke();
                     }}
 
-                    // Solid Structural Walls
+                    // Solid Boundary Walls
                     ctx.fillStyle = '#1E293B';
                     ctx.fillRect(0, 0, w, wallUpperY);
                     ctx.strokeStyle = '#00E5FF';
@@ -1045,10 +1157,8 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     ctx.strokeStyle = gateLocked ? '#FF3366' : '#00E5FF';
                     ctx.lineWidth = 8;
                     ctx.beginPath();
-                    // Upper wall segment
                     ctx.moveTo(gateX, wallUpperY);
                     ctx.lineTo(gateX, gateY - effectiveGateWidth * 0.5);
-                    // Lower wall segment
                     ctx.moveTo(gateX, gateY + effectiveGateWidth * 0.5);
                     ctx.lineTo(gateX, wallLowerY);
                     ctx.stroke();
@@ -1081,11 +1191,11 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                         ctx.beginPath();
                         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
 
-                        if (s >= 70) {{
+                        if (s >= 70 || p.panicLevel > 0.6) {{
                             ctx.fillStyle = '#FF3366';
                             ctx.shadowColor = '#FF3366';
                             ctx.shadowBlur = 10;
-                        }} else if (s >= 45) {{
+                        }} else if (s >= 45 || p.panicLevel > 0.2) {{
                             ctx.fillStyle = '#FFB300';
                             ctx.shadowColor = '#FFB300';
                             ctx.shadowBlur = 6;
@@ -1150,7 +1260,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     statusLabel.innerText = 'CRITICAL SURGE';
                     banner.className = 'alert-box status-critical';
                     actionTitle.innerText = `🚨 STAMPEDE CRUSH DANGER IN SECTOR ${{peakSector}}`;
-                    actionDesc.innerText = 'Inflow vastly exceeds exit discharge! Room pressure critical. Widen exit or halt entry!';
+                    actionDesc.innerText = 'Panic contagion & chokepoint crush! Dispatch emergency marshals immediately.';
                     dispatchBox.style.display = 'flex';
                     dispatchText.innerText = `🚨 DISPATCH MARSHALS IMMEDIATELY ➔ SECTOR ${{peakSector}}`;
 
@@ -1164,7 +1274,7 @@ def get_simulator_html(initial_particles: int = 150, initial_fps: int = 60) -> s
                     statusLabel.innerText = 'ELEVATED WARNING';
                     banner.className = 'alert-box status-warning';
                     actionTitle.innerText = `⚠️ ELEVATED COMPRESSION AT SECTOR ${{peakSector}}`;
-                    actionDesc.innerText = 'Chokepoint bottleneck forming. Slow incoming arrivals to allow discharge.';
+                    actionDesc.innerText = 'Localized agitation spreading. Throttle gate by 50% to ease compression.';
                     dispatchBox.style.display = 'flex';
                     dispatchText.innerText = `⚠️ ADVISORY ALERT ➔ MONITOR SECTOR ${{peakSector}}`;
 
