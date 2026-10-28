@@ -35,6 +35,7 @@ class DensityConfig(BaseModel):
     flow_weight: float = Field(default=0.35, description="Weight of optical flow occupancy in density calculation")
     blur_ksize: int = Field(default=5, description="Gaussian blur kernel size for pre-edge smoothing")
     min_flow_thresh: float = Field(default=0.5, description="Minimum flow magnitude in pixels to count cell as active motion occupancy")
+    edge_saturation_threshold: float = Field(default=0.12, description="Edge pixel ratio corresponding to 100% crowd density saturation")
 
 
 class StressConfig(BaseModel):
@@ -46,7 +47,7 @@ class StressConfig(BaseModel):
     w_stagnation: float = Field(default=10.0, description="Weight for stagnation divergence term")
     scale_factor: float = Field(default=1.0, description="Overall scaling multiplier for stress calibration")
     percentile_psi: float = Field(default=95.0, description="Percentile of active cells used to compute instantaneous Peak Stress Index")
-    max_expected_variance: float = Field(default=15.0, description="Expected maximum velocity variance for normalization")
+    max_expected_variance: float = Field(default=6.0, description="Expected maximum velocity variance for normalization")
 
 
 class SmoothingConfig(BaseModel):

@@ -63,35 +63,26 @@ class SpatialDensityEstimator:
             threshold2=self.config.edge_threshold_high,
         )
 
-        # 2. Block-Level Density Pooling
-        norm_edge_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
-        norm_flow_grid = np.zeros((grid_rows, grid_cols), dtype=np.float32)
+        # 2. Vectorized Block Pooling
+        crop_h = grid_rows * block_size
+        crop_w = grid_cols * block_size
+        cropped_edges = edges[:crop_h, :crop_w]
 
+        # Reshape to (grid_rows, grid_cols, block_size * block_size)
+        edge_blocks = cropped_edges.reshape(grid_rows, block_size, grid_cols, block_size).swapaxes(1, 2).reshape(grid_rows, grid_cols, -1)
         pixels_per_cell = float(block_size * block_size)
-        # Empirical edge fraction saturation: 25% edge pixels corresponds to dense crowd contours
-        edge_saturation_threshold = 0.25
+        edge_counts = np.count_nonzero(edge_blocks, axis=-1).astype(np.float32)
 
-        for r in range(grid_rows):
-            r_start = r * block_size
-            r_end = r_start + block_size
-            for c in range(grid_cols):
-                c_start = c * block_size
-                c_end = c_start + block_size
+        sat_thresh = max(1e-4, self.config.edge_saturation_threshold)
+        norm_edge_grid = np.clip((edge_counts / pixels_per_cell) / sat_thresh, 0.0, 1.0)
 
-                # Edge density calculation
-                edge_count = float(np.count_nonzero(edges[r_start:r_end, c_start:c_end]))
-                edge_fraction = edge_count / pixels_per_cell
-                norm_edge_grid[r, c] = float(np.clip(edge_fraction / edge_saturation_threshold, 0.0, 1.0))
-
-                # Flow occupancy calculation (if flow vectors provided)
-                if flow_vectors is not None:
-                    flow_mag_block = flow_vectors.magnitude[r_start:r_end, c_start:c_end]
-                    moving_pixels = float(np.count_nonzero(flow_mag_block >= self.config.min_flow_thresh))
-                    flow_fraction = moving_pixels / pixels_per_cell
-                    norm_flow_grid[r, c] = float(np.clip(flow_fraction, 0.0, 1.0))
-
-        # 3. Hybrid Fusion
+        # Flow occupancy calculation (if flow vectors provided)
         if flow_vectors is not None:
+            cropped_mag = flow_vectors.magnitude[:crop_h, :crop_w]
+            mag_blocks = cropped_mag.reshape(grid_rows, block_size, grid_cols, block_size).swapaxes(1, 2).reshape(grid_rows, grid_cols, -1)
+            moving_counts = np.count_nonzero(mag_blocks >= self.config.min_flow_thresh, axis=-1).astype(np.float32)
+            norm_flow_grid = np.clip(moving_counts / pixels_per_cell, 0.0, 1.0)
+
             total_weight = self.config.edge_weight + self.config.flow_weight
             edge_w = self.config.edge_weight / max(1e-5, total_weight)
             flow_w = self.config.flow_weight / max(1e-5, total_weight)

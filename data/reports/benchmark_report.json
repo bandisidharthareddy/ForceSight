@@ -1,0 +1,59 @@
+[
+  {
+    "scenario_name": "orderly_queue",
+    "video_path": "data/benchmarks/orderly_queue.mp4",
+    "total_frames": 90,
+    "peak_psi": 31.5,
+    "mean_psi": 31.0,
+    "highest_risk_level": "NOMINAL",
+    "warning_frame_idx": null,
+    "critical_frame_idx": null,
+    "avg_fps": 4.7,
+    "stage_latencies_ms": {
+      "optical_flow": 89.99,
+      "turbulence_stagnation": 4.42,
+      "density_estimation": 4.15,
+      "stress_engine": 0.59,
+      "temporal_risk_machine": 0.01,
+      "overlay_rendering": 107.83
+    }
+  },
+  {
+    "scenario_name": "bottleneck_jam",
+    "video_path": "data/benchmarks/bottleneck_jam.mp4",
+    "total_frames": 120,
+    "peak_psi": 89.0,
+    "mean_psi": 62.9,
+    "highest_risk_level": "CRITICAL",
+    "warning_frame_idx": 44,
+    "critical_frame_idx": 53,
+    "avg_fps": 4.5,
+    "stage_latencies_ms": {
+      "optical_flow": 93.05,
+      "turbulence_stagnation": 4.5,
+      "density_estimation": 3.87,
+      "stress_engine": 0.39,
+      "temporal_risk_machine": 0.02,
+      "overlay_rendering": 113.6
+    }
+  },
+  {
+    "scenario_name": "counter_flow",
+    "video_path": "data/benchmarks/counter_flow.mp4",
+    "total_frames": 90,
+    "peak_psi": 75.3,
+    "mean_psi": 55.7,
+    "highest_risk_level": "CRITICAL",
+    "warning_frame_idx": 36,
+    "critical_frame_idx": 79,
+    "avg_fps": 4.5,
+    "stage_latencies_ms": {
+      "optical_flow": 91.71,
+      "turbulence_stagnation": 4.0,
+      "density_estimation": 3.67,
+      "stress_engine": 0.39,
+      "temporal_risk_machine": 0.02,
+      "overlay_rendering": 115.49
+    }
+  }
+]

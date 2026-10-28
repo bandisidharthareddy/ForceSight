@@ -7,10 +7,10 @@ ForceSight makes invisible crowd pressure visible through Digital Photoelastic S
 ## Phases
 
 - [x] **Phase 1: Video Ingestion & Dense Optical Flow Core** - Ingest crowd footage and compute OpenCV dense optical flow fields and motion vectors.
-- [ ] **Phase 2: Digital Photoelastic Simulation & Peak Stress Index (PSI)** - Formulate the 0–100 Peak Stress Index from density and optical flow turbulence.
-- [ ] **Phase 3: Photoelastic Birefringence Heatmap Overlay** - Render dynamic chromatic stress fringes (blue ➔ yellow ➔ crimson) directly onto crowd video frames.
-- [ ] **Phase 4: Marshal Early-Warning Dashboard & Alert System** - Streamlit operator interface with live video, PSI gauge, rolling charts, and gate throttle advisories.
-- [ ] **Phase 5: Benchmark Evaluation & System Hardening** - Comprehensive test suite and validation against real-world bottleneck crowd scenarios.
+- [x] **Phase 2: Digital Photoelastic Simulation & Peak Stress Index (PSI)** - Formulate the 0–100 Peak Stress Index from density and optical flow turbulence.
+- [x] **Phase 3: Photoelastic Birefringence Heatmap Overlay** - Render dynamic chromatic stress fringes (blue ➔ yellow ➔ crimson) directly onto crowd video frames.
+- [x] **Phase 4: Marshal Early-Warning Dashboard & Alert System** - Streamlit operator interface with live video, PSI gauge, rolling charts, and gate throttle advisories.
+- [x] **Phase 5: Benchmark Evaluation & System Hardening** - Comprehensive test suite and validation against real-world bottleneck crowd scenarios.
 
 ## Phase Details
 
@@ -93,8 +93,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Multi-scenario benchmark suite and throughput profiler CLI
-- [ ] 05-02: False-alarm verification, edge-case hardening, and final verification
+- [x] 05-01: Multi-scenario benchmark suite and throughput profiler CLI
+- [x] 05-02: False-alarm verification, edge-case hardening, and final verification
 
 ## Progress
 
@@ -107,4 +107,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Digital Photoelastic Simulation & Peak Stress Index (PSI) | 2/2 | Complete | 2026-10-27 |
 | 3. Photoelastic Birefringence Heatmap Overlay | 2/2 | Complete | 2026-10-27 |
 | 4. Marshal Early-Warning Dashboard & Alert System | 2/2 | Complete | 2026-10-27 |
-| 5. Benchmark Evaluation & System Hardening | 0/2 | In progress | - |
+| 5. Benchmark Evaluation & System Hardening | 2/2 | Complete | 2026-10-28 |

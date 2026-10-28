@@ -59,29 +59,43 @@ class PhotoelasticOverlayRenderer:
         h, w = base_frame.shape[:2]
 
         # 1. Continuous Field Upsampling & Colorization
-        if stress_map.shape[:2] != (h, w):
+        # Performance optimization: if base_frame is high resolution (> 640px wide),
+        # upsample stress to 360x640 proxy first for softening and colormapping,
+        # then scale the resulting uint8 colored heatmap to (H, W).
+        if w > 640:
+            proxy_h, proxy_w = 360, 640
             upsampled_stress = upsample_stress_field(
                 stress_map,
-                target_shape=(h, w),
+                target_shape=(proxy_h, proxy_w),
                 blur_ksize=self.config.upsample_blur_ksize,
             )
+            color_proxy = self.colormap.apply(upsampled_stress)  # (360, 640, 3) BGR uint8
+            color_heatmap = cv2.resize(color_proxy, (w, h), interpolation=cv2.INTER_LINEAR)
+            stress_full = cv2.resize(upsampled_stress, (w, h), interpolation=cv2.INTER_LINEAR)
         else:
-            upsampled_stress = np.clip(stress_map, 0.0, 100.0).astype(np.float32)
-
-        color_heatmap = self.colormap.apply(upsampled_stress)  # (H, W, 3) BGR uint8
+            if stress_map.shape[:2] != (h, w):
+                upsampled_stress = upsample_stress_field(
+                    stress_map,
+                    target_shape=(h, w),
+                    blur_ksize=self.config.upsample_blur_ksize,
+                )
+            else:
+                upsampled_stress = np.clip(stress_map, 0.0, 100.0).astype(np.float32)
+            color_heatmap = self.colormap.apply(upsampled_stress)
+            stress_full = upsampled_stress
 
         # 2. Stress-Weighted Adaptive Alpha Map
         # alpha(S) = alpha_min + (alpha_max - alpha_min) * (S / 100)^p
-        norm_stress = np.clip(upsampled_stress / 100.0, 0.0, 1.0)
+        norm_stress = np.clip(stress_full / 100.0, 0.0, 1.0)
         power_term = np.power(norm_stress, self.config.alpha_power)
         alpha_map = self.config.alpha_min + (self.config.alpha_max - self.config.alpha_min) * power_term
         alpha_map = np.clip(alpha_map, self.config.alpha_min, self.config.alpha_max).astype(np.float32)
 
-        # 3. Vectorized Alpha Blending
-        alpha_3d = np.repeat(alpha_map[:, :, np.newaxis], 3, axis=2)
+        # 3. Vectorized Memory-Efficient Alpha Blending
+        alpha_broadcast = alpha_map[:, :, None]  # Shape (H, W, 1) broadcast across channels
         blended = (
-            base_frame.astype(np.float32) * (1.0 - alpha_3d)
-            + color_heatmap.astype(np.float32) * alpha_3d
+            base_frame.astype(np.float32) * (1.0 - alpha_broadcast)
+            + color_heatmap.astype(np.float32) * alpha_broadcast
         )
 
         # 4. Hotspot Radial Bloom & Iso-Stress Contours
@@ -100,10 +114,9 @@ class PhotoelasticOverlayRenderer:
             for ratio in self.config.contour_levels:
                 thresh_val = peak_psi * ratio
                 if thresh_val > 10.0:
-                    mask = (upsampled_stress >= thresh_val).astype(np.uint8) * 255
+                    mask = (stress_full >= thresh_val).astype(np.uint8) * 255
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     if contours:
-                        # Draw thin white or gold contour rings
                         contour_color = (255, 255, 255) if ratio >= 0.75 else (200, 240, 255)
                         cv2.polylines(blended, contours, isClosed=True, color=contour_color, thickness=1, lineType=cv2.LINE_AA)
 
@@ -120,7 +133,6 @@ class PhotoelasticOverlayRenderer:
                 sigma_sq = (r_bloom / 2.0) ** 2
                 bloom_kernel = np.exp(-dist_sq / (2.0 * max(1.0, sigma_sq))) * self.config.hotspot_bloom_intensity
 
-                # Color tone for bloom: deep crimson for critical, amber for warning
                 if peak_psi >= 75.0:
                     bloom_bgr = np.array([47, 47, 211], dtype=np.float32)  # Deep Crimson
                 else:
