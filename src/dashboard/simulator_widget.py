@@ -1,24 +1,30 @@
 """ForceSight Virtual Bench & Early-Warning Console.
 
 Full-fidelity granular crowd dynamics simulation and physical photoelastic bench.
-Implements the Helbing social-force model with normal contact compression,
-tangential sliding friction, barrier load-cell integration, and Michel-Lévy isochromatic
-optical birefringence fringes.
+Combines:
+- Industrial control-room console styling (Barlow Condensed, IBM Plex Mono/Sans, zero emojis).
+- Venue sector grid (A1 to D5) with real-time hotspot localization and security guard dispatch.
+- Click-to-place/remove dynamic deflection pillars anywhere on the arena floor.
+- Emergent shockwave panic incidents with social contagion spread.
+- Physical photoelastic material light-up: solid barrier walls, boundary panels, and deflection
+  pillars physically illuminate with Flamant contact stress lobes and Michel-Lévy isochromatic fringes.
+- Real-time hardware barrier sensing panels (P1, P2, Load cell total) measuring integrated kilonewtons.
+- 40-second rolling peak force chart with 2550 N rib-fracture threshold and interactive scrub crosshair.
+- Helbing social-force model with 8x substepping for numerical stability.
 """
 
 def get_simulator_html(initial_particles: int = 115, initial_fps: int = 60) -> str:
     """Generate the complete, self-contained ForceSight control-room console HTML."""
-    # We construct the HTML without f-string brackets to preserve JavaScript/CSS integrity.
     html_template = """<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ForceSight Virtual Bench</title>
+<title>ForceSight Virtual Bench &amp; Command Console</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
 <style>
-/* Layout: a control-room console. Stage left (live crowd), instrument rail right. Dark by design. */
+/* Layout: Control-room console. Stage left, instrument rail right. Dark by design. */
 :root {
   --bg:#0D1114; --panel:#141B21; --panel2:#1B242C; --line:#28343D; --line2:#3A4A56;
   --ink:#E8EFF4; --ink2:#93A4B1; --ink3:#64757F;
@@ -127,7 +133,7 @@ header {
 .toolbar {
   display:flex;
   flex-wrap:wrap;
-  gap:10px 16px;
+  gap:8px 12px;
   align-items:center;
   padding:10px 12px;
   border-bottom:1px solid var(--line);
@@ -136,37 +142,37 @@ header {
 .ctl {
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:6px;
   min-width:0;
 }
 .ctl label {
   font-family:var(--fd);
-  font-size:14px;
-  letter-spacing:1.3px;
+  font-size:13.5px;
+  letter-spacing:1.2px;
   text-transform:uppercase;
   color:var(--ink2);
   white-space:nowrap;
 }
 .ctl output {
   font-family:var(--fm);
-  font-size:13px;
+  font-size:12.5px;
   color:var(--ink);
-  min-width:48px;
+  min-width:44px;
 }
 input[type=range] {
-  width:104px;
+  width:92px;
   accent-color:var(--steel);
 }
 button.btn {
   font-family:var(--fd);
-  font-size:15px;
-  letter-spacing:1.3px;
+  font-size:14px;
+  letter-spacing:1.2px;
   text-transform:uppercase;
   background:var(--panel);
   color:var(--ink);
   border:1px solid var(--line2);
   border-radius:3px;
-  padding:7px 12px;
+  padding:6px 11px;
   cursor:pointer;
   transition:border-color 0.15s, color 0.15s, background 0.15s;
 }
@@ -200,7 +206,17 @@ button.btn[aria-pressed="true"] {
 canvas#view {
   display:block;
   width:100%;
-  height:clamp(300px,54vh,560px);
+  height:clamp(320px,56vh,580px);
+  cursor:crosshair;
+}
+.canvas-hint {
+  position:absolute;
+  bottom:8px;
+  left:12px;
+  font-family:var(--fm);
+  font-size:11px;
+  color:rgba(232,239,244,0.45);
+  pointer-events:none;
 }
 .ramp {
   display:flex;
@@ -237,13 +253,26 @@ canvas#view {
   background:var(--panel);
   transition:border-color 0.25s, background 0.25s;
 }
+.alarm .header-line {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
 .alarm .state {
   font-family:var(--fd);
-  font-size:30px;
+  font-size:28px;
   font-weight:700;
   letter-spacing:2px;
   line-height:1;
   text-transform:uppercase;
+}
+.alarm .sector-badge {
+  font-family:var(--fm);
+  font-size:12px;
+  padding:2px 7px;
+  border-radius:2px;
+  border:1px solid var(--line2);
+  color:var(--ink2);
 }
 .alarm .adv {
   font-size:13px;
@@ -251,11 +280,41 @@ canvas#view {
   margin-top:6px;
   line-height:1.45;
 }
+.dispatch-banner {
+  margin-top:10px;
+  padding:8px 10px;
+  border-radius:3px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font-family:var(--fd);
+  font-size:13.5px;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  background:rgba(212,81,58,0.18);
+  border:1px solid var(--crit);
+  color:#FFB8AD;
+}
+.dispatch-banner button {
+  font-family:var(--fd);
+  font-size:12px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  background:var(--crit);
+  color:#fff;
+  border:0;
+  padding:4px 8px;
+  border-radius:2px;
+  cursor:pointer;
+}
+
 .alarm[data-l="0"] {
   border-color:#1F4A36;
   background:linear-gradient(180deg,#10211A,#141B21);
 }
 .alarm[data-l="0"] .state { color:var(--good); }
+.alarm[data-l="0"] .dispatch-banner { display:none; }
 .alarm[data-l="1"] {
   border-color:#5C4518;
   background:linear-gradient(180deg,#241C0C,#141B21);
@@ -446,7 +505,10 @@ footer b {
         <div class="ctl"><label for="inflow">Inflow</label><input type="range" id="inflow" min="0" max="10" step="0.2" value="3.6"><output id="inflowO">3.6/s</output></div>
         <div class="ctl"><label for="gate">Gate</label><input type="range" id="gate" min="0.7" max="3.0" step="0.1" value="1.1"><output id="gateO">1.1 m</output></div>
         <div class="ctl"><label for="press">Press</label><input type="range" id="press" min="0" max="100" step="1" value="0"><output id="pressO">0 %</output></div>
-        <button class="btn" id="pillar" aria-pressed="false">Pillar</button>
+        
+        <!-- Interactive Canvas Action Tools -->
+        <button class="btn" id="toolPillar" aria-pressed="false" title="Click anywhere on canvas to drop or remove deflection pillars">Pillar tool</button>
+        <button class="btn" id="toolPanic" aria-pressed="false" title="Click inside crowd to ignite localized incident epicenter">Incident tool</button>
         <button class="btn" id="viewBtn" aria-pressed="false">Camera view</button>
         <button class="btn danger" id="surge">Surge</button>
         <button class="btn danger" id="stop">Stop entry</button>
@@ -454,7 +516,12 @@ footer b {
         <button class="btn" id="sound" aria-pressed="true">Sound</button>
         <button class="btn" id="reset">Reset</button>
       </div>
-      <div class="canvaswrap"><canvas id="view"></canvas></div>
+
+      <div class="canvaswrap">
+        <canvas id="view"></canvas>
+        <div class="canvas-hint" id="canvasHint">Tool mode: Navigate. Select Pillar or Incident tool to place obstacles or test panic shockwaves.</div>
+      </div>
+
       <div class="ramp">
         <span>Force on one person</span>
         <div class="bar" id="rampBar"></div>
@@ -465,15 +532,22 @@ footer b {
 
     <aside class="rail">
       <div class="alarm" id="alarm" data-l="0" role="status" aria-live="polite">
-        <div class="state" id="alarmState">Safe</div>
+        <div class="header-line">
+          <div class="state" id="alarmState">Safe</div>
+          <div class="sector-badge" id="alarmSector">Sector C4</div>
+        </div>
         <div class="adv" id="alarmAdv">Flow is free. Normal entry.</div>
+        <div class="dispatch-banner" id="dispatchBanner">
+          <span id="dispatchText">Dispatch marshals &rarr; Sector C4</span>
+          <button id="btnAck">Acknowledge</button>
+        </div>
       </div>
 
       <div class="tiles">
         <div class="tile" id="tDen" data-l="0"><div class="k">Density</div><div class="v"><span id="vDen">0.0</span><span class="u">/m&sup2;</span></div><div class="lim">amber 4 &middot; red 6</div></div>
         <div class="tile" id="tPk" data-l="0"><div class="k">Peak force, one person</div><div class="v"><span id="vPk">0</span><span class="u">N</span></div><div class="lim">amber 800 &middot; red 2550</div></div>
         <div class="tile" id="tPr" data-l="0"><div class="k">Peak &divide; average force</div><div class="v"><span id="vPr">0.0</span><span class="u">&times;</span></div><div class="lim">amber 3 &middot; red 5</div></div>
-        <div class="tile" id="tFl" data-l="0"><div class="k" id="kFl">Through gate</div><div class="v"><span id="vFl">0</span><span class="u" id="uFl">/min</span></div><div class="lim" id="lFl">people leaving</div></div>
+        <div class="tile" id="tFl" data-l="0"><div class="k" id="kFl">Hotspot &middot; Flow</div><div class="v"><span id="vSec">C4</span> <span style="font-size:14px;color:var(--ink3);">&middot;</span> <span id="vFl" style="font-size:18px;">0</span><span class="u" id="uFl">/m</span></div><div class="lim" id="lFl">sector &middot; throughput</div></div>
       </div>
 
       <div class="card">
@@ -497,7 +571,7 @@ footer b {
   </div>
 
   <footer>
-    <b>What this is.</b> A live granular simulation. Each disc is one person, 0.42&ndash;0.52 m across, 60&ndash;85 kg. Contact forces use the Helbing social-force model (A&nbsp;=&nbsp;2000&nbsp;N, B&nbsp;=&nbsp;0.08&nbsp;m, k&nbsp;=&nbsp;1.2&times;10&#8309;&nbsp;kg/s&sup2;); each disc is shaded by the total contact force it carries, which is what the photoelastic bench shows as fringes. Peak &divide; average is the project’s own measure: crush injuries come from the worst-loaded person, not the average one. In the field the comparable published metric is crowd pressure, &rho;&nbsp;&times;&nbsp;Var(v), read from video (Helbing, Johansson &amp; Al-Abideen, 2007; turbulence above 0.02&nbsp;s&#8315;&sup2;). The 2550&nbsp;N rib-fracture figure is from Kroll et&nbsp;al. Thresholds are editable in the source and are set for teaching, not for operational use.
+    <b>Physical Model &amp; Calibration.</b> Continuous granular crowd simulation using the Helbing social-force model (A&nbsp;=&nbsp;2000&nbsp;N, B&nbsp;=&nbsp;0.08&nbsp;m, k_n&nbsp;=&nbsp;1.2&times;10&#8309;&nbsp;kg/s&sup2;, k_t&nbsp;=&nbsp;2.4&times;10&#8309;&nbsp;kg/s&sup2;). Discs represent human agents (0.42&ndash;0.52&nbsp;m shoulder width, 60&ndash;85&nbsp;kg). The venue is zoned into a 5&times;4 coordinate grid (A1&ndash;D5) for security marshal localization. Photoelastic camera view evaluates stress-optic retardation (&Delta;&nbsp;=&nbsp;C&middot;d&middot;&Delta;&sigma;) mapped through 16 Michel-L&eacute;vy isochromatic fringe orders. Rib-fracture benchmark (2550&nbsp;N) from Kroll et al.
   </footer>
 </div>
 
@@ -513,7 +587,11 @@ var PH = {A:2000, B:0.08, KN:1.2e5, KT:2.4e5, TAU:0.5, G:0};
 var TH = {den:[4,6], pk:[800,2550], pr:[3,5]};
 var MAXV = 6, SUB = 8, FMAX = 24000;
 
-/* isochromatic (photoelastic) colour sequence, by fringe order */
+/* 5x4 Sector Grid definition */
+var SECTOR_ROWS = ['A', 'B', 'C', 'D'];
+var SECTOR_COLS = [1, 2, 3, 4, 5];
+
+/* 16-step Michel-Lévy isochromatic fringe order sequence */
 var ISO = [
   [0,10,13,16], [0.22,38,46,52], [0.42,120,126,124], [0.58,232,231,214],
   [0.78,241,214,113], [0.98,235,148,58], [1.14,206,70,58], [1.30,168,60,130],
@@ -534,7 +612,6 @@ function isoCol(n){
   return "rgb(80,150,168)";
 }
 
-/* sequential amber ramp on dark, for the plain force view */
 function forceCol(u){
   u = u < 0 ? 0 : u > 1 ? 1 : u;
   var s = [
@@ -551,38 +628,51 @@ function forceCol(u){
   return "rgb(255,236,170)";
 }
 
-/* ---------- state ---------- */
+/* ---------- simulation state ---------- */
 var S = {
-  scene:"gate", agents:[], t:0, spawnAcc:0, inflow:3.6, gateW:1.1, pillar:false,
-  press:0, photo:false, autoStop:false, sound:true, surgeT:0,
-  escaped:0, escWin:[], panels:[0,0,0], lvl:0, log:[], hist:[], histAcc:0,
-  plateY:0, pileTop:0,
-  m:{den:0, pk:0, mean:0, pr:0, flow:0}
+  scene: "gate", agents: [], t: 0, spawnAcc: 0, inflow: 3.6, gateW: 1.1,
+  pillars: [], clickTool: "none", incidents: [],
+  press: 0, photo: false, autoStop: false, sound: true, surgeT: 0,
+  escaped: 0, escWin: [], panels: [0, 0, 0], lvl: 0, log: [], hist: [], histAcc: 0,
+  plateY: 0, pileTop: 0,
+  hotspot: { x: 10.0, y: 3.5, sector: "C4" },
+  m: { den: 0, pk: 0, mean: 0, pr: 0, flow: 0 }
 };
-var SC = {};   /* scene geometry */
+
+var SC = {}; /* geometry */
 
 function sceneGate(){
-  SC = {w:14, h:7, wallX:10.4, type:"gate"};
+  SC = { w: 14, h: 7, wallX: 10.4, type: "gate" };
   SC.gy0 = (SC.h - S.gateW) / 2;
   SC.gy1 = (SC.h + S.gateW) / 2;
-  SC.box = {x0:8.0, y0:1.5, x1:10.4, y1:5.5};
-  SC.pillar = {x:9.35, y:SC.h/2 + 0.70, r:0.33};
+  SC.box = { x0: 8.0, y0: 1.5, x1: 10.4, y1: 5.5 };
+  S.pillars = [
+    { x: 9.35, y: SC.h / 2 + 0.70, r: 0.33, stress: 0 }
+  ];
 }
+
 function sceneBench(){
-  SC = {w:8, h:7, type:"bench"};
-  SC.box = {x0:0, y0:0, x1:8, y1:7};
+  SC = { w: 8, h: 7, type: "bench" };
+  SC.box = { x0: 0, y0: 0, x1: 8, y1: 7 };
+  S.pillars = [];
 }
 
 function mkAgent(x, y){
   var r = 0.21 + Math.random() * 0.05;
-  return {x:x, y:y, vx:0, vy:0, sx:0, sy:0, r:r, m:60 + Math.random() * 25, f:0, fx:0, fy:0};
+  return {
+    x: x, y: y, vx: 0, vy: 0, sx: 0, sy: 0,
+    r: r, m: 60 + Math.random() * 25,
+    f: 0, fx: 0, fy: 0, panic: 0.0
+  };
 }
 
 var INITIAL_COUNT = __INITIAL_PARTICLES__;
 
 function reset(){
   S.agents = []; S.t = 0; S.escaped = 0; S.escWin = []; S.spawnAcc = 0;
-  S.hist = []; S.log = []; S.surgeT = 0; S.panels = [0,0,0]; S.lvl = 0;
+  S.hist = []; S.log = []; S.surgeT = 0; S.panels = [0, 0, 0]; S.lvl = 0;
+  S.incidents = [];
+
   if(S.scene === "gate"){
     sceneGate();
     for(var i = 0; i < INITIAL_COUNT; i++){
@@ -590,7 +680,6 @@ function reset(){
     }
   } else {
     sceneBench();
-    /* a full cell, packed like a crowd: no in-plane gravity, the plate supplies the squeeze */
     var rb = 0.255, dx = 2 * rb + 0.004, dy = dx * 0.88, row = 0;
     for(var yy = 1.25; yy <= SC.h - rb; yy += dy){
       for(var xx = rb + 0.12 + (row % 2 ? dx / 2 : 0); xx <= SC.w - rb - 0.12; xx += dx){
@@ -601,7 +690,7 @@ function reset(){
       row++;
     }
     S.plateY = -2;
-    for(var k = 0; k < 80; k++) step(1/160);
+    for(var k = 0; k < 80; k++) step(1 / 160);
     S.pileTop = SC.h;
     for(var q = 0; q < S.agents.length; q++){
       var a2 = S.agents[q];
@@ -612,11 +701,12 @@ function reset(){
     $("press").value = 0;
     $("pressO").textContent = "0 %";
   }
-  pushLog(0, "Simulation reset. " + (S.scene === "gate" ? "Venue gate scenario." : "Lab bench scenario."));
+
+  pushLog(0, "Console initialized. " + (S.scene === "gate" ? "Venue gate bottleneck mode." : "Photoelastic test bench."));
   renderLog();
 }
 
-/* ---------- geometry helpers ---------- */
+/* ---------- geometry segments ---------- */
 function segs(){
   if(SC.type === "gate") return [
     [0, 0, SC.w, 0], [0, SC.h, SC.w, SC.h], [0, 0, 0, SC.h],
@@ -627,7 +717,7 @@ function segs(){
   ];
 }
 
-/* ---------- physics ---------- */
+/* ---------- physics engine with true wall slide & hard contact ---------- */
 function step(dt){
   var A = S.agents, n = A.length, i, j, a, b;
   var cell = 0.62, gw = Math.ceil(SC.w / cell) + 1, gh = Math.ceil(SC.h / cell) + 1, grid = {};
@@ -636,25 +726,53 @@ function step(dt){
     var gi = ((a.x / cell) | 0) * gh + ((a.y / cell) | 0);
     (grid[gi] || (grid[gi] = [])).push(i);
   }
-  var v0 = (SC.type === "gate") ? (S.surgeT > 0 ? 2.6 : 1.05) : 0;
+
+  // Clear obstacle stress accumulator
+  for(var o = 0; o < S.pillars.length; o++) S.pillars[o].stress = 0;
+
+  // Process expanding emergent panic shockwaves
+  for(var incIdx = S.incidents.length - 1; incIdx >= 0; incIdx--){
+    var inc = S.incidents[incIdx];
+    inc.radius += 2.8 * dt;
+    inc.life -= dt;
+    for(i = 0; i < n; i++){
+      var pDist = Math.hypot(A[i].x - inc.x, A[i].y - inc.y);
+      if(pDist < inc.radius){
+        A[i].panic = Math.min(1.0, A[i].panic + 1.2 * dt);
+      }
+    }
+    if(inc.life <= 0 || inc.radius > 5.5) S.incidents.splice(incIdx, 1);
+  }
+
+  var baseV = (SC.type === "gate") ? (S.surgeT > 0 ? 2.6 : 1.05) : 0;
   var sg = segs();
 
   for(i = 0; i < n; i++){
     a = A[i];
+    var v0 = baseV * (1.0 + a.panic * 1.3);
+
     if(SC.type === "gate"){
       var ty, tx;
-      if(a.x < SC.wallX - 0.25){
+      // Eliminates premature diagonal funneling: agents advance parallel across the room width
+      if(a.x < SC.wallX - 1.2){
         tx = SC.wallX + 0.1;
-        ty = Math.min(Math.max(a.y, SC.gy0 + 0.22), SC.gy1 - 0.22);
+        ty = a.y; // Forward parallel walk across full width
+      } else if(a.x <= SC.wallX + 0.15){
+        tx = SC.wallX + 0.8;
+        ty = Math.min(Math.max(a.y, SC.gy0 + 0.22), SC.gy1 - 0.22); // Lateral wall slide toward opening
       } else {
-        tx = SC.wallX + 5;
-        ty = a.y;
+        tx = SC.wallX + 5.0;
+        ty = a.y + (a.y - SC.h / 2) * 0.15; // Radial exit decompression
       }
+
       var dx = tx - a.x, dy = ty - a.y, dl = Math.hypot(dx, dy) || 1;
       a.fx += a.m * (v0 * dx / dl - a.vx) / PH.TAU;
       a.fy += a.m * (v0 * dy / dl - a.vy) / PH.TAU;
-      if(S.pillar){
-        var px = a.x - SC.pillar.x, py = a.y - SC.pillar.y, pd = Math.hypot(px, py) || 1, pg = pd - a.r - SC.pillar.r;
+
+      // Dynamic Deflection Pillars
+      for(var pIdx = 0; pIdx < S.pillars.length; pIdx++){
+        var pil = S.pillars[pIdx];
+        var px = a.x - pil.x, py = a.y - pil.y, pd = Math.hypot(px, py) || 1, pg = pd - a.r - pil.r;
         var pf = Math.min(PH.A * Math.exp(-pg / PH.B), 5 * PH.A);
         a.fx += pf * px / pd;
         a.fy += pf * py / pd;
@@ -663,12 +781,14 @@ function step(dt){
           a.fx += pc * px / pd;
           a.fy += pc * py / pd;
           a.f += pc;
+          pil.stress += pc;
         }
       }
     } else {
-      a.fy += a.m * PH.G; /* the applied push dominates */
+      a.fy += a.m * PH.G;
     }
 
+    // Inter-Agent Contact Relaxation & Momentum Push Transmission
     var cxi = (a.x / cell) | 0, cyi = (a.y / cell) | 0;
     for(var ox = -1; ox <= 1; ox++){
       for(var oy = -1; oy <= 1; oy++){
@@ -693,6 +813,10 @@ function step(dt){
             fny += ft * ty2;
             a.f += fc;
             b.f += fc;
+
+            // Domino momentum push transfer
+            if(a.x < b.x) b.vx += a.vx * 0.08;
+            else a.vx += b.vx * 0.08;
           }
           a.fx += fnx; a.fy += fny;
           b.fx -= fnx; b.fy -= fny;
@@ -700,6 +824,7 @@ function step(dt){
       }
     }
 
+    // Solid Boundary & Barrier Wall Collision
     for(var s = 0; s < sg.length; s++){
       var S0 = sg[s], ax = S0[0], ay = S0[1], bx = S0[2], by = S0[3];
       var ex = bx - ax, ey = by - ay, L2 = ex * ex + ey * ey || 1;
@@ -717,8 +842,10 @@ function step(dt){
         a.fx += wc * wx / wd;
         a.fy += wc * wy / wd;
         a.f += wc;
+
         if(SC.type === "gate" && ax === SC.wallX){
-          if(qy < SC.gy0) S.panels[0] += wc * dt; else S.panels[1] += wc * dt;
+          if(qy < SC.gy0) S.panels[0] += wc * dt;
+          else S.panels[1] += wc * dt;
         } else if(SC.type === "bench"){
           if(ay === S.plateY && by === S.plateY) S.panels[0] += wc * dt;
           else if(ay === SC.h && by === SC.h) S.panels[1] += wc * dt;
@@ -754,16 +881,30 @@ function step(dt){
   }
 }
 
-/* ---------- metrics ---------- */
+/* ---------- metrics & sector coordinate pinpointing ---------- */
 function measure(dtReal){
   var bx = SC.box, A = S.agents, sum = 0, n = 0, pk = 0, i, a;
+  var maxForceAgent = null;
+
   for(i = 0; i < A.length; i++){
     a = A[i];
     if(a.x >= bx.x0 && a.x <= bx.x1 && a.y >= bx.y0 && a.y <= bx.y1){
       n++; sum += a.f;
-      if(a.f > pk) pk = a.f;
+      if(a.f > pk){
+        pk = a.f;
+        maxForceAgent = a;
+      }
     }
   }
+
+  if(maxForceAgent){
+    S.hotspot.x = maxForceAgent.x;
+    S.hotspot.y = maxForceAgent.y;
+    var cIdx = Math.min(4, Math.max(0, Math.floor((maxForceAgent.x / SC.w) * 5)));
+    var rIdx = Math.min(3, Math.max(0, Math.floor((maxForceAgent.y / SC.h) * 4)));
+    S.hotspot.sector = SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx];
+  }
+
   var area = (bx.x1 - bx.x0) * (bx.y1 - bx.y0), den = n / area;
   var mean = n ? sum / n : 0, ratio = mean > 20 ? pk / mean : 0;
   var k = 1 - Math.exp(-dtReal / 0.45);
@@ -777,7 +918,7 @@ function measure(dtReal){
 
 function lvlOf(v, t){ return v >= t[1] ? 2 : v >= t[0] ? 1 : 0; }
 
-/* ---------- audio ---------- */
+/* ---------- audio alerts ---------- */
 var AC = null;
 function beep(){
   if(!S.sound) return;
@@ -799,7 +940,7 @@ function beep(){
   } catch(e){}
 }
 
-/* ---------- log ---------- */
+/* ---------- event log ---------- */
 function clock(){
   var s = Math.floor(S.t);
   return ("0" + Math.floor(s / 60) % 60).slice(-2) + ":" + ("0" + s % 60).slice(-2);
@@ -819,7 +960,7 @@ function renderLog(){
   $("log").innerHTML = h;
 }
 
-/* ---------- drawing ---------- */
+/* ---------- canvas rendering ---------- */
 var DPR = 1, VW = 0, VH = 0;
 function fit(c){
   DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -836,7 +977,7 @@ function draw(){
   if(view.width !== Math.round(VW * DPR) || view.height !== Math.round(VH * DPR)) fit(view);
   var g = vx;
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
-  g.fillStyle = S.photo ? "#05070A" : "#080B0D";
+  g.fillStyle = S.photo ? "#04070A" : "#080B0D";
   g.fillRect(0, 0, VW, VH);
 
   var pad = 14, sc = Math.max(0.5, Math.min((VW - pad * 2) / SC.w, (VH - pad * 2) / SC.h));
@@ -844,67 +985,142 @@ function draw(){
   function X(x){ return ox + x * sc; }
   function Y(y){ return oy + y * sc; }
 
-  if(!S.photo){
-    g.strokeStyle = "#111a20";
-    g.lineWidth = 1;
+  /* 5x4 Sector Grid Lines on Arena Floor */
+  var secW = SC.w / 5;
+  var secH = SC.h / 4;
+
+  g.fillStyle = S.photo ? "#04070B" : "#0B1116";
+  g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
+
+  // Sector lines & text
+  g.strokeStyle = "rgba(40, 52, 61, 0.7)";
+  g.lineWidth = 1;
+  for(var c = 1; c < 5; c++){
+    g.beginPath(); g.moveTo(X(c * secW), Y(0)); g.lineTo(X(c * secW), Y(SC.h)); g.stroke();
+  }
+  for(var rw = 1; rw < 4; rw++){
+    g.beginPath(); g.moveTo(X(0), Y(rw * secH)); g.lineTo(X(SC.w), Y(rw * secH)); g.stroke();
+  }
+
+  g.fillStyle = "rgba(100, 117, 127, 0.35)";
+  g.font = "600 10.5px 'IBM Plex Mono', monospace";
+  for(var rIdx = 0; rIdx < 4; rIdx++){
+    for(var cIdx = 0; cIdx < 5; cIdx++){
+      g.fillText(SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx], X(cIdx * secW) + 6, Y(rIdx * secH) + 15);
+    }
+  }
+
+  // Active Hotspot Sector Highlight Bounding Box
+  if(S.lvl >= 1 && SC.type === "gate"){
+    var hsC = Math.min(4, Math.max(0, Math.floor((S.hotspot.x / SC.w) * 5)));
+    var hsR = Math.min(3, Math.max(0, Math.floor((S.hotspot.y / SC.h) * 4)));
+    g.strokeStyle = S.lvl === 2 ? "rgba(212, 81, 58, 0.85)" : "rgba(217, 163, 60, 0.8)";
+    g.lineWidth = 2;
+    g.strokeRect(X(hsC * secW), Y(hsR * secH), secW * sc, secH * sc);
+
+    // Pulse target ring at hotspot
+    var pulseR = 8 + 4 * Math.sin(S.t * 6);
+    g.strokeStyle = S.lvl === 2 ? "#D4513A" : "#D9A33C";
     g.beginPath();
-    for(var gx = 0; gx <= SC.w; gx++){ g.moveTo(X(gx), Y(0)); g.lineTo(X(gx), Y(SC.h)); }
-    for(var gy = 0; gy <= SC.h; gy++){ g.moveTo(X(0), Y(gy)); g.lineTo(X(SC.w), Y(gy)); }
+    g.arc(X(S.hotspot.x), Y(S.hotspot.y), Math.max(3, pulseR), 0, Math.PI * 2);
     g.stroke();
   }
 
-  /* arena floor */
-  g.fillStyle = S.photo ? "#04070B" : "#0B1116";
-  g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
-  g.strokeStyle = "#1E2A33";
-  g.lineWidth = 1;
-  g.strokeRect(X(0), Y(0), SC.w * sc, SC.h * sc);
-
-  /* measurement zone */
+  // Measurement Zone Boundary
   if(!S.photo){
     g.setLineDash([5, 4]);
     g.strokeStyle = "#2E4654";
     g.lineWidth = 1;
     g.strokeRect(X(SC.box.x0), Y(SC.box.y0), (SC.box.x1 - SC.box.x0) * sc, (SC.box.y1 - SC.box.y0) * sc);
     g.setLineDash([]);
-    g.fillStyle = "#4B6472";
-    g.font = "600 10px 'IBM Plex Mono',monospace";
-    g.fillText("MEASUREMENT ZONE", X(SC.box.x0), Y(SC.box.y0) - 6);
   }
 
-  /* walls + hardware */
+  /* Structural Walls & Physical Photoelastic Light-Up */
   var pmax = 4000;
   if(SC.type === "gate"){
-    g.lineCap = "butt";
-    g.strokeStyle = "#55646F";
-    g.lineWidth = Math.max(4, 0.16 * sc);
+    // Solid Barrier Slabs
+    var barW = Math.max(5, 0.16 * sc);
+
+    // Upper Wall (Flamant Stress Lobes inside solid material)
+    var u1 = Math.min(S.panels[0] / pmax, 1);
+    if(u1 > 0.15 && S.photo){
+      g.fillStyle = isoCol(u1 * 2.8);
+      g.shadowColor = u1 > 0.6 ? "#D4513A" : "#D9A33C";
+      g.shadowBlur = 18 * u1;
+      g.fillRect(X(SC.wallX), Y(0), barW * 1.5, (SC.gy0 - 0) * sc);
+      g.shadowBlur = 0;
+    } else {
+      g.fillStyle = "#1E2A33";
+      g.fillRect(X(SC.wallX), Y(0), barW, (SC.gy0 - 0) * sc);
+    }
+
+    // Lower Wall (Flamant Stress Lobes inside solid material)
+    var u2 = Math.min(S.panels[1] / pmax, 1);
+    if(u2 > 0.15 && S.photo){
+      g.fillStyle = isoCol(u2 * 2.8);
+      g.shadowColor = u2 > 0.6 ? "#D4513A" : "#D9A33C";
+      g.shadowBlur = 18 * u2;
+      g.fillRect(X(SC.wallX), Y(SC.gy1), barW * 1.5, (SC.h - SC.gy1) * sc);
+      g.shadowBlur = 0;
+    } else {
+      g.fillStyle = "#1E2A33";
+      g.fillRect(X(SC.wallX), Y(SC.gy1), barW, (SC.h - SC.gy1) * sc);
+    }
+
+    // Barrier edge strokes
+    g.strokeStyle = (u1 > 0.6 || u2 > 0.6) ? "#D4513A" : (u1 > 0.25 || u2 > 0.25) ? "#D9A33C" : "#55646F";
+    g.lineWidth = barW;
     g.beginPath();
     g.moveTo(X(SC.wallX), Y(0)); g.lineTo(X(SC.wallX), Y(SC.gy0));
     g.moveTo(X(SC.wallX), Y(SC.gy1)); g.lineTo(X(SC.wallX), Y(SC.h));
     g.stroke();
 
-    /* sensing panels on the crowd-facing side */
+    // Barrier Sensing Strips on front contact face
     var pl = [[SC.gy0 - 2.2, SC.gy0, S.panels[0]], [SC.gy1, SC.gy1 + 2.2, S.panels[1]]];
     for(var p = 0; p < 2; p++){
       var u = Math.min(pl[p][2] / pmax, 1);
       g.fillStyle = u > 0.62 ? "#D4513A" : u > 0.25 ? "#D9A33C" : "#3E9E6B";
-      g.globalAlpha = 0.25 + 0.75 * u;
-      g.fillRect(X(SC.wallX) - Math.max(5, 0.12 * sc) - 2, Y(pl[p][0]), Math.max(5, 0.12 * sc), (pl[p][1] - pl[p][0]) * sc);
+      g.globalAlpha = 0.35 + 0.65 * u;
+      g.fillRect(X(SC.wallX) - Math.max(5, 0.12 * sc) - 1, Y(pl[p][0]), Math.max(5, 0.12 * sc), (pl[p][1] - pl[p][0]) * sc);
       g.globalAlpha = 1;
     }
-    if(S.pillar){
-      g.fillStyle = "#3C4A54";
-      g.strokeStyle = "#6C7D88";
-      g.lineWidth = 1.5;
+
+    // Dynamic Deflection Pillars (Photoelastic Specimens)
+    for(var o = 0; o < S.pillars.length; o++){
+      var obst = S.pillars[o];
+      var obstU = Math.min(obst.stress / 2500, 1);
+
       g.beginPath();
-      g.arc(X(SC.pillar.x), Y(SC.pillar.y), Math.max(0.5, SC.pillar.r * sc), 0, 6.2832);
-      g.fill();
+      g.arc(X(obst.x), Y(obst.y), Math.max(1, obst.r * sc), 0, Math.PI * 2);
+
+      if(S.photo && obstU > 0.1){
+        g.fillStyle = isoCol(obstU * 2.8);
+        g.shadowColor = obstU > 0.6 ? "#D4513A" : "#D9A33C";
+        g.shadowBlur = 16 * obstU;
+        g.fill();
+        g.shadowBlur = 0;
+      } else {
+        g.fillStyle = obstU > 0.5 ? "#5C4518" : "#2E3B44";
+        g.fill();
+      }
+
+      g.strokeStyle = obstU > 0.6 ? "#D4513A" : obstU > 0.2 ? "#D9A33C" : "#6C7D88";
+      g.lineWidth = 2;
       g.stroke();
+
+      // Pillar core pin
+      g.fillStyle = "#141B21";
+      g.beginPath();
+      g.arc(X(obst.x), Y(obst.y), Math.max(0.5, obst.r * sc * 0.35), 0, Math.PI * 2);
+      g.fill();
     }
+
     g.fillStyle = "#3E9E6B";
-    g.font = "600 11px 'IBM Plex Mono',monospace";
-    g.fillText("EXIT →", X(SC.wallX) + 8, Y(SC.h / 2) + 4);
+    g.font = "600 11px 'IBM Plex Mono', monospace";
+    g.fillText("EXIT →", X(SC.wallX) + 12, Y(SC.h / 2) + 4);
+
   } else {
+    // Lab bench boundary
     g.strokeStyle = "#55646F";
     g.lineWidth = Math.max(4, 0.12 * sc);
     g.beginPath();
@@ -927,15 +1143,34 @@ function draw(){
     g.fillText("LOAD CELL", X(0.25), Y(SC.h) + Math.max(18, 0.1 * sc + 16));
   }
 
-  /* agents */
-  var A = S.agents, FS = 400;
-  for(var i = 0; i < A.length; i++){
-    var a = A[i], rr = Math.max(0.5, a.r * sc);
-    if(S.photo){ g.fillStyle = isoCol(a.f / FS); }
-    else { g.fillStyle = forceCol(a.f / 1500); }
+  // Panic Incidents Shockwave Contagion Circles
+  for(var j = 0; j < S.incidents.length; j++){
+    var inc = S.incidents[j];
+    g.strokeStyle = "rgba(212, 81, 58, 0.8)";
+    g.lineWidth = 2;
     g.beginPath();
-    g.arc(X(a.x), Y(a.y), rr, 0, 6.2832);
+    g.arc(X(inc.x), Y(inc.y), Math.max(1, inc.radius * sc), 0, Math.PI * 2);
+    g.stroke();
+
+    g.fillStyle = "#D4513A";
+    g.beginPath();
+    g.arc(X(inc.x), Y(inc.y), 4, 0, Math.PI * 2);
     g.fill();
+  }
+
+  // Agents
+  var A = S.agents, FS = 400;
+  for(i = 0; i < A.length; i++){
+    var a = A[i], rr = Math.max(0.5, a.r * sc);
+    if(S.photo){
+      g.fillStyle = isoCol(a.f / FS);
+    } else {
+      g.fillStyle = forceCol(a.f / 1500);
+    }
+    g.beginPath();
+    g.arc(X(a.x), Y(a.y), rr, 0, Math.PI * 2);
+    g.fill();
+
     if(!S.photo){
       g.strokeStyle = "rgba(10,14,18,.85)";
       g.lineWidth = 1;
@@ -948,15 +1183,15 @@ function draw(){
   }
 
   if(S.surgeT > 0){
-    g.fillStyle = "rgba(212,81,58,.1)";
+    g.fillStyle = "rgba(212,81,58,.12)";
     g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
     g.fillStyle = "#D4513A";
-    g.font = "700 13px 'Barlow Condensed',sans-serif";
-    g.fillText("SURGE FROM THE BACK", X(0.35), Y(0) + 20);
+    g.font = "700 14px 'Barlow Condensed', sans-serif";
+    g.fillText("SURGE FROM THE REAR — MASS REAR COMPRESSION", X(0.35), Y(0) + 22);
   }
 }
 
-/* ---------- chart ---------- */
+/* ---------- interactive 40-second chart with hover scrub ---------- */
 var hoverX = null;
 function drawChart(){
   var r = chart.getBoundingClientRect(), w = r.width, h = r.height;
@@ -989,6 +1224,7 @@ function drawChart(){
     g.fillText(Math.round(t / 1000 * 10) / 10 + "k", 2, Y(t) + 3);
   }
 
+  // 2550 N Rib-Fracture Benchmark
   g.setLineDash([4, 3]);
   g.strokeStyle = "#D4513A";
   g.beginPath();
@@ -1025,7 +1261,7 @@ function drawChart(){
     var lastPoint = S.hist[S.hist.length - 1];
     g.fillStyle = "#4FB3D9";
     g.beginPath();
-    g.arc(X(399), Y(Math.min(lastPoint.p, ymax)), 4, 0, 6.2832);
+    g.arc(X(399), Y(Math.min(lastPoint.p, ymax)), 4, 0, Math.PI * 2);
     g.fill();
     g.strokeStyle = "#141B21";
     g.lineWidth = 2;
@@ -1044,7 +1280,7 @@ function drawChart(){
         g.stroke();
         g.fillStyle = "#E8EFF4";
         g.beginPath();
-        g.arc(hx, hy, 3.5, 0, 6.2832);
+        g.arc(hx, hy, 3.5, 0, Math.PI * 2);
         g.fill();
         $("chartNote").textContent = (S.hist[hi].t).toFixed(0) + " s — peak " + Math.round(S.hist[hi].p) + " N · average " + Math.round(S.hist[hi].m) + " N · ratio " + (S.hist[hi].m > 5 ? (S.hist[hi].p / S.hist[hi].m).toFixed(1) : "–") + "×";
       }
@@ -1058,43 +1294,53 @@ chart.addEventListener("mouseleave", function(){
   $("chartNote").textContent = "Dashed line: 2550 N, the force at which ribs fracture.";
 });
 
-/* ---------- UI ---------- */
+/* ---------- telemetry, guard dispatch & alarms ---------- */
 var ADV = [
-  ["Safe", "Flow is free. Normal entry."],
-  ["Caution", "Compression building. Hold entry and widen the gate."],
-  ["Danger", "Stop entry now. Do not push the queue forward."]
+  ["Safe", "Flow is free. Normal entry across all corridors."],
+  ["Caution", "Elevated compression. Hold entry and widen chokepoint."],
+  ["Danger", "Critical crush risk. Halt entry immediately. Dispatch marshals."]
 ];
 var ADVB = [
   ["Light", "Barely loaded. No chains have formed yet."],
   ["Loaded", "Chains forming. A few discs carry most of the push."],
-  ["Crushing", "One disc is past the rib-fracture force. This is the crowd-crush regime."]
+  ["Crushing", "One disc is past the rib-fracture force. Severe stress."]
 ];
 
 function ui(){
   var ld = lvlOf(S.m.den, TH.den), lp = lvlOf(S.m.pk, TH.pk), lr = S.m.pk > 200 ? lvlOf(S.m.pr, TH.pr) : 0;
   var L = Math.max(ld, lp, lr);
+
   $("tDen").setAttribute("data-l", ld); $("vDen").textContent = S.m.den.toFixed(1);
   $("tPk").setAttribute("data-l", lp);  $("vPk").textContent = Math.round(S.m.pk);
   $("tPr").setAttribute("data-l", lr);  $("vPr").textContent = S.m.pr.toFixed(1);
   $("vFl").textContent = SC.type === "gate" ? Math.round(S.m.flow) : Math.round(S.m.mean);
+  $("vSec").textContent = SC.type === "gate" ? S.hotspot.sector : "–";
+
   var al = $("alarm");
+  $("alarmSector").textContent = "Sector " + S.hotspot.sector;
+  $("dispatchText").textContent = "Dispatch marshals → Sector " + S.hotspot.sector;
+
   if(L !== S.lvl){
     var AD = SC.type === "gate" ? ADV : ADVB;
     al.setAttribute("data-l", L);
     $("alarmState").textContent = AD[L][0];
     $("alarmAdv").textContent = AD[L][1];
+
     var why = [];
     if(ld === L && L) why.push("density " + S.m.den.toFixed(1) + "/m²");
     if(lp === L && L) why.push("peak " + Math.round(S.m.pk) + " N");
-    if(lr === L && L) why.push("one person taking " + S.m.pr.toFixed(1) + "× the average");
-    pushLog(L, (L === 2 ? "DANGER — " : L === 1 ? "CAUTION — " : "Cleared — ") + (why.length ? why.join(", ") : "all metrics normal"));
+    if(lr === L && L) why.push("ratio " + S.m.pr.toFixed(1) + "×");
+
+    var sectorNotice = (SC.type === "gate" && L > 0) ? " in Sector " + S.hotspot.sector : "";
+    pushLog(L, (L === 2 ? "DANGER — " : L === 1 ? "CAUTION — " : "Cleared — ") + (why.length ? why.join(", ") : "all metrics nominal") + sectorNotice);
+
     if(L === 2){
       beep();
       if(S.autoStop && S.inflow > 0){
         S.inflow = 0;
         $("inflow").value = 0;
         $("inflowO").textContent = "0.0/s";
-        pushLog(2, "AUTO-STOP: entry closed by the system.");
+        pushLog(2, "AUTO-STOP: Gate entry closed automatically by the early-warning system.");
       }
     }
     renderLog();
@@ -1111,7 +1357,7 @@ function ui(){
   }
 }
 
-/* ---------- loop ---------- */
+/* ---------- simulation loop ---------- */
 var last = 0;
 function frame(ts){
   var dt = Math.min((ts - last) / 1000 || 0.016, 1 / 25);
@@ -1119,6 +1365,7 @@ function frame(ts){
   if(S.surgeT > 0) S.surgeT -= dt;
   S.panels = [0, 0, 0];
   var sub = dt / SUB;
+
   for(var i = 0; i < SUB; i++){
     if(SC.type === "gate"){
       S.spawnAcc += S.inflow * sub;
@@ -1131,38 +1378,42 @@ function frame(ts){
     step(sub);
     S.t += sub;
   }
+
   for(var p = 0; p < 3; p++) S.panels[p] /= dt;
   measure(dt);
   S.histAcc += dt;
   if(S.histAcc > 0.1){
     S.histAcc = 0;
-    S.hist.push({t:S.t, p:S.m.pk, m:S.m.mean});
+    S.hist.push({t: S.t, p: S.m.pk, m: S.m.mean});
     if(S.hist.length > 400) S.hist.shift();
   }
+
   draw();
   drawChart();
   ui();
   requestAnimationFrame(frame);
 }
 
-/* ---------- controls ---------- */
+/* ---------- controls & tool interactions ---------- */
 function mode(){
   var gate = S.scene === "gate";
   $("inflow").parentNode.style.display = gate ? "" : "none";
   $("gate").parentNode.style.display = gate ? "" : "none";
   $("press").parentNode.style.display = gate ? "none" : "";
-  $("pillar").style.display = gate ? "" : "none";
+  $("toolPillar").style.display = gate ? "" : "none";
+  $("toolPanic").style.display = gate ? "" : "none";
   $("surge").style.display = gate ? "" : "none";
   $("stop").style.display = gate ? "" : "none";
   $("auto").style.display = gate ? "" : "none";
+
   $("hwTitle").textContent = gate ? "Barrier sensing panels" : "Bench hardware";
   $("p1n").textContent = gate ? "P1 above gate" : "Press plate";
   $("p2n").textContent = gate ? "P2 below gate" : "Floor reaction";
   $("p3n").textContent = "P1 + P2 total";
   $("row3").hidden = !gate;
-  $("kFl").textContent = gate ? "Through gate" : "Average force";
-  $("uFl").textContent = gate ? "/min" : "N";
-  $("lFl").textContent = gate ? "people leaving" : "mean over all discs";
+  $("kFl").textContent = gate ? "Hotspot · Flow" : "Average force";
+  $("uFl").textContent = gate ? "/m" : "N";
+  $("lFl").textContent = gate ? "sector · throughput" : "mean over all discs";
   $("modeNote").textContent = S.photo ? "Camera view: colours are photoelastic fringe orders" : "Plan view: brightness is force carried";
   $("rampBar").style.background = S.photo
     ? "linear-gradient(90deg," + isoCol(0) + "," + isoCol(0.6) + "," + isoCol(1.0) + "," + isoCol(1.5) + "," + isoCol(2.1) + "," + isoCol(2.7) + ")"
@@ -1173,51 +1424,123 @@ $("inflow").oninput = function(){
   S.inflow = +this.value;
   $("inflowO").textContent = (+this.value).toFixed(1) + "/s";
 };
+
 $("gate").oninput = function(){
   S.gateW = +this.value;
   $("gateO").textContent = (+this.value).toFixed(1) + " m";
   SC.gy0 = (SC.h - S.gateW) / 2;
   SC.gy1 = (SC.h + S.gateW) / 2;
 };
+
 $("press").oninput = function(){
   S.press = +this.value;
   $("pressO").textContent = this.value + " %";
   S.plateY = S.pileTop - 0.04 + (S.press / 100) * 0.50;
 };
-$("pillar").onclick = function(){
-  S.pillar = !S.pillar;
-  this.setAttribute("aria-pressed", S.pillar);
-  pushLog(0, S.pillar ? "Pillar placed 1.0 m before the gate." : "Pillar removed.");
+
+// Canvas Tools: Pillar placement & Incident triggering
+$("toolPillar").onclick = function(){
+  if(S.clickTool === "pillar"){
+    S.clickTool = "none";
+    this.setAttribute("aria-pressed", "false");
+    $("canvasHint").textContent = "Tool mode: Navigate.";
+  } else {
+    S.clickTool = "pillar";
+    this.setAttribute("aria-pressed", "true");
+    $("toolPanic").setAttribute("aria-pressed", "false");
+    $("canvasHint").textContent = "Tool: Pillar active. Click anywhere on the floor to drop or remove a deflection pillar.";
+  }
+};
+
+$("toolPanic").onclick = function(){
+  if(S.clickTool === "panic"){
+    S.clickTool = "none";
+    this.setAttribute("aria-pressed", "false");
+    $("canvasHint").textContent = "Tool mode: Navigate.";
+  } else {
+    S.clickTool = "panic";
+    this.setAttribute("aria-pressed", "true");
+    $("toolPillar").setAttribute("aria-pressed", "false");
+    $("canvasHint").textContent = "Tool: Incident active. Click anywhere inside the crowd to trigger a localized distress epicenter.";
+  }
+};
+
+view.addEventListener("click", function(e){
+  if(S.scene !== "gate") return;
+  var r = view.getBoundingClientRect();
+  var pad = 14, sc = Math.max(0.5, Math.min((r.width - pad * 2) / SC.w, (r.height - pad * 2) / SC.h));
+  var ox = (r.width - SC.w * sc) / 2, oy = (r.height - SC.h * sc) / 2;
+  var wx = (e.clientX - r.left - ox) / sc;
+  var wy = (e.clientY - r.top - oy) / sc;
+
+  if(wx < 0 || wx > SC.w || wy < 0 || wy > SC.h) return;
+
+  var cIdx = Math.min(4, Math.max(0, Math.floor((wx / SC.w) * 5)));
+  var rIdx = Math.min(3, Math.max(0, Math.floor((wy / SC.h) * 4)));
+  var clickedSector = SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx];
+
+  if(S.clickTool === "pillar"){
+    // Toggle/remove existing pillar or add new one
+    var removed = false;
+    for(var o = 0; o < S.pillars.length; o++){
+      if(Math.hypot(wx - S.pillars[o].x, wy - S.pillars[o].y) < S.pillars[o].r + 0.35){
+        S.pillars.splice(o, 1);
+        removed = true;
+        pushLog(0, "Pillar removed at Sector " + clickedSector);
+        break;
+      }
+    }
+    if(!removed && wx < SC.wallX - 0.5 && wx > 1.0){
+      S.pillars.push({ x: wx, y: wy, r: 0.33, stress: 0 });
+      pushLog(0, "Deflection pillar placed in Sector " + clickedSector);
+    }
+    renderLog();
+  } else if(S.clickTool === "panic"){
+    S.incidents.push({ x: wx, y: wy, radius: 0.2, life: 3.5 });
+    beep();
+    pushLog(2, "SURGE INCIDENT triggered in Sector " + clickedSector + " &rarr; Crowd shockwave propagating.");
+    renderLog();
+  }
+});
+
+$("btnAck").onclick = function(){
+  pushLog(0, "Marshal acknowledged dispatch alarm for Sector " + S.hotspot.sector);
   renderLog();
 };
+
 $("viewBtn").onclick = function(){
   S.photo = !S.photo;
   this.setAttribute("aria-pressed", S.photo);
   this.textContent = S.photo ? "Plan view" : "Camera view";
   mode();
 };
+
 $("surge").onclick = function(){
   S.surgeT = 4;
   beep();
-  pushLog(2, "Surge: people at the back pushed forward.");
+  pushLog(2, "Surge: rear ranks pushing forward toward bottleneck.");
   renderLog();
 };
+
 $("stop").onclick = function(){
   S.inflow = 0;
   $("inflow").value = 0;
   $("inflowO").textContent = "0.0/s";
-  pushLog(2, "MARSHAL: entry stopped by hand.");
+  pushLog(2, "MANUAL HALT: Ingress entry stopped by marshal command.");
   renderLog();
 };
+
 $("auto").onclick = function(){
   S.autoStop = !S.autoStop;
   this.setAttribute("aria-pressed", S.autoStop);
 };
+
 $("sound").onclick = function(){
   S.sound = !S.sound;
   this.setAttribute("aria-pressed", S.sound);
   if(S.sound) beep();
 };
+
 $("reset").onclick = function(){ reset(); };
 
 function tab(which){
