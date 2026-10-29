@@ -41,63 +41,98 @@ def scan_benchmark_videos(directory: str = "data/benchmarks") -> list[str]:
 
 
 def inject_custom_css():
-    """Inject ultra-modern responsive dark cyber-glass UI styling."""
+    """Inject industrial control-room styling matching the virtual bench console."""
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+        :root {
+            --bg: #0D1114;
+            --panel: #141B21;
+            --panel2: #1B242C;
+            --line: #28343D;
+            --line2: #3A4A56;
+            --ink: #E8EFF4;
+            --ink2: #93A4B1;
+            --ink3: #64757F;
+            --steel: #4FB3D9;
+            --good: #3E9E6B;
+            --warn: #D9A33C;
+            --crit: #D4513A;
+            --fd: "Barlow Condensed", 'Arial Narrow', sans-serif;
+            --fb: "IBM Plex Sans", system-ui, sans-serif;
+            --fm: "IBM Plex Mono", ui-monospace, monospace;
+        }
 
         html, body, [class*="css"] {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--fb);
+            color: var(--ink);
         }
 
         .stApp {
-            background: radial-gradient(circle at 10% 10%, #0B1120 0%, #030712 100%);
-            color: #F8FAFC;
+            background-color: var(--bg);
+            color: var(--ink);
         }
 
-        /* Modernized Sidebar */
+        /* Control-Room Sidebar */
         section[data-testid="stSidebar"] {
-            background-color: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(20px);
-            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            background-color: var(--panel);
+            border-right: 1px solid var(--line);
         }
 
-        /* Glass Cards */
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.65);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 16px;
-            backdrop-filter: blur(12px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-            margin-bottom: 14px;
+        section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span {
+            font-family: var(--fb);
+            color: var(--ink2);
         }
 
-        /* Action Buttons */
+        /* Clean Human-Engineered Buttons */
         .stButton > button {
-            border-radius: 8px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
-            color: #FFFFFF;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            font-family: var(--fd);
+            font-size: 14px;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            border-radius: 3px;
+            border: 1px solid var(--line2);
+            background-color: var(--panel2);
+            color: var(--ink);
+            transition: all 0.15s ease;
+            box-shadow: none;
+            padding: 6px 14px;
         }
 
         .stButton > button:hover {
-            border-color: #00E5FF;
-            color: #00E5FF;
-            box-shadow: 0 0 16px rgba(0, 229, 255, 0.35);
-            transform: translateY(-1px);
+            border-color: var(--steel);
+            color: #FFFFFF;
+            background-color: #222E38;
         }
 
-        /* Metrics */
-        div[data-testid="stMetricValue"] {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 26px;
-            color: #00E5FF;
+        .stButton > button:focus-visible {
+            outline: 2px solid var(--steel);
+            outline-offset: 2px;
+        }
+
+        /* Form elements & sliders */
+        div[data-baseweb="select"] > div {
+            background-color: var(--panel2);
+            border-color: var(--line2);
+            color: var(--ink);
+            border-radius: 3px;
+        }
+
+        div[data-testid="stSlider"] label {
+            font-family: var(--fd);
+            font-size: 13.5px;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--ink2);
+        }
+
+        div[data-testid="stRadio"] label {
+            font-family: var(--fb);
+            color: var(--ink);
+            font-size: 14px;
         }
         </style>
         """,
@@ -124,89 +159,94 @@ def init_session_state(video_path: str, pipeline_configs: dict) -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="ForceSight — Digital Photoelastic Crowd Early-Warning",
-        page_icon="⚡",
+        page_title="ForceSight Console",
         layout="wide",
         initial_sidebar_state="expanded",
     )
 
     inject_custom_css()
 
-    # Sidebar: Mode Selection & Tuning
+    # Sidebar: System console navigation
     st.sidebar.markdown(
         """
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom: 12px;">
-            <span style="font-size:24px;">⚡</span>
-            <span style="font-size:18px; font-weight:700; color:#FFFFFF; letter-spacing:0.5px;">ForceSight Core</span>
+        <div style="border-bottom: 1px solid #28343D; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="font-family:'Barlow Condensed', sans-serif; font-size:22px; font-weight:700; letter-spacing:1px; color:#E8EFF4; text-transform:uppercase;">
+                ForceSight
+            </div>
+            <div style="font-family:'Barlow Condensed', sans-serif; font-size:12px; letter-spacing:1.8px; color:#64757F; text-transform:uppercase;">
+                Control Console
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     app_mode = st.sidebar.radio(
-        "Operation Mode",
+        "Console Mode",
         [
-            "⚡ Real-Time Crowd Physics Simulator (60 FPS)",
-            "📹 Benchmark Video Analyzer (Farnebäck CV)",
+            "Virtual bench & crowd simulator",
+            "Benchmark video analyzer",
         ],
         index=0,
     )
 
     st.sidebar.markdown("---")
 
-    if app_mode.startswith("⚡ Real-Time"):
+    if app_mode.startswith("Virtual bench"):
         # Interactive Simulator Mode
-        st.sidebar.markdown("### 🎛️ **Simulator Guidance**")
-        st.sidebar.info(
-            "This mode runs **direct physical crowd simulation at 60 FPS** on the client canvas.\n\n"
-            "- **🚪 Gate Barrier**: Toggle chokepoint to simulate stampede crush.\n"
-            "- **⚡ Surge Button**: Triggers rapid surge compression against the gate.\n"
-            "- **Photoelastic Fringes**: Observe authentic Michel-Lévy chromatic fringe orders (darkfield ➔ amber ➔ crimson)."
-        )
-
-        initial_particles = st.sidebar.slider("Initial Crowd Density", 60, 350, 180, 10)
-
-        # Header
-        st.markdown(
+        st.sidebar.markdown(
             """
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div>
-                        <h2 style="margin: 0; font-size: 22px; color: #FFFFFF; font-weight: 800;">
-                            ⚡ ForceSight — Pure Physical Crowd Simulator
-                        </h2>
-                        <p style="margin: 3px 0 0 0; font-size: 13px; color: #94A3B8;">
-                            Direct Social-Force Engine • Michel-Lévy Photoelastic Birefringence • Real-Time 60 FPS Canvas
-                        </p>
-                    </div>
-                    <div style="text-align: right;">
-                        <span style="background: rgba(0, 229, 255, 0.15); border: 1px solid #00E5FF; color: #00E5FF; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">
-                            60 FPS HARDWARE ACCELERATED
-                        </span>
-                    </div>
-                </div>
+            <div style="font-family:'Barlow Condensed', sans-serif; font-size:14px; letter-spacing:1.4px; color:#93A4B1; text-transform:uppercase; margin-bottom:8px;">
+                Console Setup
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # Render client-side 60 FPS simulator widget
+        initial_particles = st.sidebar.slider("Initial crowd count", 40, 240, 115, 5)
+
+        st.sidebar.markdown(
+            r"""
+            <div style="font-size:12px; color:#64757F; line-height:1.6; margin-top:14px;">
+                <b>Physics engine:</b> Helbing social-force model with normal contact compression ($K_n$) and tangential sliding friction ($K_t$).
+                <br><br>
+                <b>Optical engine:</b> 16-step Michel-Lévy isochromatic fringe sequence modeling circular polariscope retardance ($\Delta$).
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Render client-side control-room console widget
         sim_html = get_simulator_html(initial_particles=initial_particles)
-        components.html(sim_html, height=650, scrolling=False)
+        components.html(sim_html, height=1080, scrolling=True)
 
     else:
         # Benchmark Video Analysis Mode
-        st.sidebar.markdown("### 📹 **Benchmark Video Source**")
+        st.sidebar.markdown(
+            """
+            <div style="font-family:'Barlow Condensed', sans-serif; font-size:14px; letter-spacing:1.4px; color:#93A4B1; text-transform:uppercase; margin-bottom:8px;">
+                Source Video
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         video_files = scan_benchmark_videos()
-        selected_video = st.sidebar.selectbox("Benchmark Video", options=video_files, index=0)
+        selected_video = st.sidebar.selectbox("Benchmark file", options=video_files, index=0)
 
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🎛️ **Vision & Physics Calibration**")
-        w_density = st.sidebar.slider("Density Weight ($w_1$)", 10.0, 50.0, 30.0, 5.0)
-        w_variance = st.sidebar.slider("Turbulence Weight ($w_2$)", 10.0, 50.0, 25.0, 5.0)
-        warning_thresh = st.sidebar.slider("Warning Limit (PSI)", 40.0, 60.0, 50.0, 5.0)
-        critical_thresh = st.sidebar.slider("Critical Limit (PSI)", 65.0, 85.0, 75.0, 5.0)
-        target_fps = st.sidebar.slider("Target Playback FPS", 10, 45, 25, 5)
+        st.sidebar.markdown(
+            """
+            <div style="font-family:'Barlow Condensed', sans-serif; font-size:14px; letter-spacing:1.4px; color:#93A4B1; text-transform:uppercase; margin-bottom:8px;">
+                Physics Calibration
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        w_density = st.sidebar.slider("Density weight (w1)", 10.0, 50.0, 30.0, 5.0)
+        w_variance = st.sidebar.slider("Turbulence weight (w2)", 10.0, 50.0, 25.0, 5.0)
+        warning_thresh = st.sidebar.slider("Warning threshold (PSI)", 40.0, 60.0, 50.0, 5.0)
+        critical_thresh = st.sidebar.slider("Critical threshold (PSI)", 65.0, 85.0, 75.0, 5.0)
+        target_fps = st.sidebar.slider("Playback frame rate", 10, 45, 25, 5)
 
         pipeline_configs = dict(
             stress_config=StressConfig(w_density=w_density, w_variance=w_variance),
@@ -217,13 +257,13 @@ def main() -> None:
 
         st.markdown(
             """
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">
-                <h2 style="margin: 0; font-size: 22px; color: #FFFFFF; font-weight: 800;">
-                    📹 ForceSight — Video Ingestion & Dense Optical Flow Analysis
-                </h2>
-                <p style="margin: 3px 0 0 0; font-size: 13px; color: #94A3B8;">
-                    Farnebäck Dense Optical Flow • Coupled Helbing Stress Surface • Photoelastic Birefringence Blend
-                </p>
+            <div style="background:#141B21; border:1px solid #28343D; border-radius:4px; padding:12px 16px; margin-bottom:14px;">
+                <div style="font-family:'Barlow Condensed', sans-serif; font-size:22px; font-weight:700; letter-spacing:0.8px; color:#E8EFF4; text-transform:uppercase;">
+                    Video Ingestion & Dense Optical Flow Analysis
+                </div>
+                <div style="font-family:'IBM Plex Sans', sans-serif; font-size:13px; color:#93A4B1; margin-top:2px;">
+                    Farnebäck optical flow &middot; Coupled Helbing stress surface &middot; Photoelastic birefringence blend
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -234,12 +274,12 @@ def main() -> None:
         with col_video:
             video_placeholder = st.empty()
             c1, c2, c3, c4 = st.columns(4)
-            if c1.button("▶️ Play Video", key="btn_play", width="stretch"):
+            if c1.button("Play", key="btn_play", width="stretch"):
                 st.session_state.is_playing = True
-            if c2.button("⏸️ Pause", key="btn_pause", width="stretch"):
+            if c2.button("Pause", key="btn_pause", width="stretch"):
                 st.session_state.is_playing = False
-            step_clicked = c3.button("⏭️ Next Frame", key="btn_step", width="stretch")
-            if c4.button("🔄 Rewind", key="btn_rewind", width="stretch"):
+            step_clicked = c3.button("Step", key="btn_step", width="stretch")
+            if c4.button("Reset", key="btn_rewind", width="stretch"):
                 st.session_state.loader.seek_frame(0)
                 st.session_state.pipeline.reset()
                 st.session_state.history_frames.clear()

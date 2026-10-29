@@ -1,1350 +1,1246 @@
-"""High-fidelity, authentic physical crowd disaster simulation engine.
+"""ForceSight Virtual Bench & Early-Warning Console.
 
-Fixes all 15 empirical defects identified in the diagnostic report:
-1. Eliminates single-point premature funneling: agents move forward parallel to walls, spreading across the room.
-2. Hard-core body collision & repulsion: no particle overlapping; bodies push and transmit force physically.
-3. True Wall-Slide Dynamics: agents only guide toward the exit opening when approaching or contacting the wall boundary.
-4. Compressive push transmission (domino effect): rear crowds push front ranks against the barrier wall, causing massive pressure spikes AT THE WALL.
-5. Decompression fanning: evacuated particles fan out radially into open exterior space.
-6. Stop-and-go turbulent shockwave propagation.
-7. Heterogeneous body dimensions and masses.
-8. Interactive obstacles (pillars) with physical wake boundary layers.
-9. Authentic Michel-Lévy photoelastic birefringence centered on actual contact force concentrations.
+Full-fidelity granular crowd dynamics simulation and physical photoelastic bench.
+Implements the Helbing social-force model with normal contact compression,
+tangential sliding friction, barrier load-cell integration, and Michel-Lévy isochromatic
+optical birefringence fringes.
 """
 
-def get_simulator_html(initial_particles: int = 180, initial_fps: int = 60) -> str:
-    """Generate standalone self-contained high-performance simulator HTML component."""
-    return f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <style>
-            * {{
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0;
-                user-select: none;
-            }}
-            body {{
-                background-color: transparent;
-                font-family: 'Inter', -apple-system, sans-serif;
-                color: #F8FAFC;
-                overflow: hidden;
-            }}
-            .sim-wrapper {{
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-                background: radial-gradient(circle at 10% 10%, #0F172A 0%, #020617 100%);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 14px;
-                padding: 14px 16px;
-                box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
-            }}
-            .top-bar {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 10px;
-                padding-bottom: 8px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            }}
-            .brand {{
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }}
-            .brand-badge {{
-                background: linear-gradient(135deg, #00E5FF, #3B82F6);
-                width: 34px;
-                height: 34px;
-                border-radius: 8px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 18px;
-                box-shadow: 0 0 16px rgba(0, 229, 255, 0.45);
-            }}
-            .brand-title {{
-                font-size: 15px;
-                font-weight: 800;
-                letter-spacing: 0.5px;
-                color: #FFFFFF;
-            }}
-            .brand-sub {{
-                font-size: 11px;
-                color: #94A3B8;
-                font-family: 'JetBrains Mono', monospace;
-            }}
-            .top-actions {{
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }}
-            .sound-toggle-btn {{
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                color: #94A3B8;
-                border-radius: 6px;
-                padding: 5px 12px;
-                font-size: 12px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }}
-            .sound-toggle-btn.active {{
-                background: rgba(0, 229, 255, 0.15);
-                border-color: #00E5FF;
-                color: #00E5FF;
-                box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
-            }}
-            .status-pill {{
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 5px 14px;
-                border-radius: 20px;
-                font-size: 12px;
-                font-weight: 800;
-                letter-spacing: 0.8px;
-                transition: all 0.25s ease;
-            }}
-            .status-nominal {{
-                background: rgba(16, 185, 129, 0.15);
-                border: 1px solid #10B981;
-                color: #6EE7B7;
-                box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
-            }}
-            .status-warning {{
-                background: rgba(245, 158, 11, 0.2);
-                border: 1px solid #F59E0B;
-                color: #FCD34D;
-                box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
-            }}
-            .status-critical {{
-                background: rgba(239, 68, 68, 0.25);
-                border: 1px solid #EF4444;
-                color: #FCA5A5;
-                box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
-                animation: pulse-critical 1.2s infinite;
-            }}
-            @keyframes pulse-critical {{
-                0% {{ box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }}
-                50% {{ box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }}
-                100% {{ box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }}
-            }}
-            .main-content {{
-                display: grid;
-                grid-template-columns: 1fr 340px;
-                gap: 14px;
-            }}
-            @media (max-width: 1020px) {{
-                .main-content {{
-                    grid-template-columns: 1fr;
-                }}
-            }}
-            .canvas-container {{
-                position: relative;
-                background-color: #030712;
-                border-radius: 10px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                overflow: hidden;
-                width: 100%;
-                height: 540px;
-                cursor: crosshair;
-            }}
-            canvas {{
-                width: 100%;
-                height: 100%;
-                display: block;
-            }}
-            .hud-overlay {{
-                position: absolute;
-                top: 10px;
-                left: 12px;
-                pointer-events: none;
-                font-family: 'JetBrains Mono', monospace;
-                font-size: 11px;
-                color: rgba(255, 255, 255, 0.85);
-                background: rgba(3, 7, 18, 0.75);
-                padding: 6px 12px;
-                border-radius: 6px;
-                backdrop-filter: blur(8px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                display: flex;
-                gap: 12px;
-                flex-wrap: wrap;
-            }}
-            .mode-switch-bar {{
-                position: absolute;
-                top: 10px;
-                right: 12px;
-                display: flex;
-                gap: 6px;
-                z-index: 10;
-            }}
-            .mode-btn {{
-                background: rgba(15, 23, 42, 0.85);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                color: #94A3B8;
-                font-size: 11px;
-                padding: 4px 10px;
-                border-radius: 4px;
-                cursor: pointer;
-                transition: all 0.2s;
-            }}
-            .mode-btn.active {{
-                background: #00E5FF;
-                color: #030712;
-                font-weight: 700;
-                border-color: #00E5FF;
-                box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
-            }}
-            .canvas-helper-tip {{
-                position: absolute;
-                bottom: 10px;
-                left: 12px;
-                pointer-events: none;
-                font-size: 11px;
-                color: rgba(148, 163, 184, 0.9);
-                background: rgba(3, 7, 18, 0.7);
-                padding: 5px 12px;
-                border-radius: 4px;
-                backdrop-filter: blur(6px);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-            }}
-            .right-pane {{
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-            }}
-            .card {{
-                background: rgba(15, 23, 42, 0.7);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                border-radius: 10px;
-                padding: 12px 14px;
-                backdrop-filter: blur(12px);
-            }}
-            .card-title {{
-                font-size: 11px;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                color: #94A3B8;
-                margin-bottom: 8px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }}
-            .gauge-wrap {{
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                padding: 4px 0;
-            }}
-            .psi-number {{
-                font-family: 'JetBrains Mono', monospace;
-                font-size: 44px;
-                font-weight: 800;
-                letter-spacing: -1px;
-                line-height: 1;
-                color: #00E5FF;
-                text-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
-                transition: color 0.2s ease;
-            }}
-            .psi-unit {{
-                font-size: 11px;
-                color: #94A3B8;
-                letter-spacing: 1px;
-                margin-top: 3px;
-            }}
-            .meter-bar-bg {{
-                width: 100%;
-                height: 8px;
-                background: rgba(255, 255, 255, 0.08);
-                border-radius: 4px;
-                margin-top: 8px;
-                overflow: hidden;
-            }}
-            .meter-bar-fill {{
-                height: 100%;
-                width: 18%;
-                background: #00E5FF;
-                border-radius: 4px;
-                transition: width 0.15s ease, background 0.2s ease;
-            }}
-            .sector-tag {{
-                font-family: 'JetBrains Mono', monospace;
-                background: rgba(255, 255, 255, 0.12);
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-weight: 800;
-                color: #F8FAFC;
-            }}
-            .alert-box {{
-                border-radius: 8px;
-                padding: 10px 12px;
-                font-size: 12px;
-                line-height: 1.4;
-                transition: all 0.25s ease;
-            }}
-            .controls-panel {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-                margin-top: 4px;
-            }}
-            button.btn-action {{
-                font-family: 'Inter', sans-serif;
-                background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                color: #FFFFFF;
-                padding: 7px 10px;
-                border-radius: 6px;
-                font-size: 11px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 6px;
-            }}
-            button.btn-action:hover {{
-                border-color: #00E5FF;
-                color: #00E5FF;
-                box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
-                transform: translateY(-1px);
-            }}
-            button.btn-action.danger {{
-                border-color: rgba(239, 68, 68, 0.4);
-                background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(153, 27, 27, 0.45) 100%);
-            }}
-            button.btn-action.danger:hover {{
-                border-color: #EF4444;
-                color: #FCA5A5;
-                box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
-            }}
-            .slider-row {{
-                display: flex;
-                flex-direction: column;
-                gap: 3px;
-                margin-top: 6px;
-            }}
-            .slider-label {{
-                display: flex;
-                justify-content: space-between;
-                font-size: 11px;
-                color: #94A3B8;
-            }}
-            input[type="range"] {{
-                width: 100%;
-                accent-color: #00E5FF;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 4px;
-                height: 5px;
-                cursor: pointer;
-            }}
-            .mini-chart-canvas {{
-                width: 100%;
-                height: 48px;
-                display: block;
-            }}
-            .guard-dispatch-card {{
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                background: rgba(239, 68, 68, 0.15);
-                border: 1px dashed rgba(239, 68, 68, 0.5);
-                border-radius: 6px;
-                padding: 6px 10px;
-                margin-top: 6px;
-                font-size: 11px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="sim-wrapper">
-            <div class="top-bar">
-                <div class="brand">
-                    <div class="brand-badge">⚡</div>
-                    <div>
-                        <div class="brand-title">ForceSight — Emergent Crowd Surge & Stampede Simulator</div>
-                        <div class="brand-sub">Physical Space Dispersion • Wall Compression Fringes • Real Contact Packing</div>
-                    </div>
-                </div>
-                <div class="top-actions">
-                    <button id="btnSoundToggle" class="sound-toggle-btn active">
-                        <span id="soundIcon">🔊</span> Audio Siren: ON
-                    </button>
-                    <div id="statusPill" class="status-pill status-nominal">
-                        <span style="width: 8px; height: 8px; border-radius: 50%; background: currentColor;"></span>
-                        <span id="statusLabel">NOMINAL FLOW</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="main-content">
-                <div class="canvas-container" id="canvasBox">
-                    <canvas id="simCanvas"></canvas>
-                    <div class="hud-overlay" id="hud">
-                        <span>FPS: <strong id="fpsVal">60</strong></span>
-                        <span>OCCUPANCY: <strong id="agentCountVal" style="color: #00E5FF;">160</strong></span>
-                        <span>EVACUATED: <strong id="evacCountVal" style="color: #10B981;">0</strong></span>
-                        <span>EXIT: <strong id="gateStateText" style="color: #00E5FF;">OPEN (110px)</strong></span>
-                        <span>PEAK HOTSPOT: <strong id="peakSectorHud" style="color: #FCD34D;">C4</strong></span>
-                    </div>
-
-                    <!-- Canvas Interactive Tools -->
-                    <div class="mode-switch-bar">
-                        <button id="toolPillar" class="mode-btn active">🏛️ Place Pillar</button>
-                        <button id="toolPanic" class="mode-btn">🔥 Click to Ignite Panic</button>
-                    </div>
-
-                    <div class="canvas-helper-tip" id="helperTip">
-                        💡 <strong>Real Crowd Mechanics</strong>: People spread naturally across the full arena. When approaching the wall, they compress against it and slide along the boundary towards the door!
-                    </div>
-                </div>
-
-                <div class="right-pane">
-                    <!-- Gauge & Sector Card -->
-                    <div class="card">
-                        <div class="card-title">
-                            <span>PEAK STRESS INDEX</span>
-                            <span class="sector-tag" id="sectorTag">SECTOR C4</span>
-                        </div>
-                        <div class="gauge-wrap">
-                            <div class="psi-number" id="psiVal">18.4</div>
-                            <div class="psi-unit">PSI (0 — 100)</div>
-                            <div class="meter-bar-bg">
-                                <div class="meter-bar-fill" id="meterFill"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Mini Momentum Chart -->
-                    <div class="card">
-                        <div class="card-title">MOMENTUM TIMELINE (dPSI/dt)</div>
-                        <canvas id="momentumCanvas" class="mini-chart-canvas"></canvas>
-                    </div>
-
-                    <!-- Action Guidance & Guard Dispatch Alert -->
-                    <div class="alert-box status-nominal" id="actionBanner">
-                        <strong id="actionTitle">✅ NORMAL FLOW</strong><br>
-                        <span id="actionDesc" style="font-size: 11px; opacity: 0.9;">Inflow matches discharge capacity. Ingress & exit flowing safely.</span>
-                        <div id="dispatchBox" class="guard-dispatch-card" style="display: none;">
-                            <span id="dispatchText">🚨 DISPATCH TO SECTOR C4</span>
-                            <button id="btnAcknowledge" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; background: #EF4444; color: white; border: none; cursor: pointer;">ACK</button>
-                        </div>
-                    </div>
-
-                    <!-- Incident & Chokepoint Controls -->
-                    <div class="card">
-                        <div class="card-title">SURGE & INCIDENT GENERATOR</div>
-                        <div class="controls-panel">
-                            <button id="btnRandomIncident" class="btn-action danger">🔥 Random Panic Incident</button>
-                            <button id="btnToggleGate" class="btn-action">🚪 Lock Exit Gate</button>
-                            <button id="btnCalmDown" class="btn-action">🕊️ Restore Calm</button>
-                            <button id="btnClearPillars" class="btn-action">🧹 Clear Pillars</button>
-                        </div>
-
-                        <!-- Panic Contagion Radius -->
-                        <div class="slider-row">
-                            <div class="slider-label">
-                                <span>Panic Contagion Spread Speed</span>
-                                <span id="contagionLabel">1.5x</span>
-                            </div>
-                            <input type="range" id="contagionSlider" min="0.5" max="3.0" step="0.1" value="1.5">
-                        </div>
-
-                        <!-- Inflow Rate Slider -->
-                        <div class="slider-row">
-                            <div class="slider-label">
-                                <span>Entry Inflow Rate (Arrivals/sec)</span>
-                                <span id="inflowLabel">4 arrivals/s</span>
-                            </div>
-                            <input type="range" id="inflowSlider" min="0" max="15" step="1" value="4">
-                        </div>
-
-                        <!-- Exit Bottleneck Size Slider -->
-                        <div class="slider-row">
-                            <div class="slider-label">
-                                <span>Exit Chokepoint Width</span>
-                                <span id="gateWidthLabel">110 px</span>
-                            </div>
-                            <input type="range" id="gateWidthSlider" min="20" max="220" step="10" value="110">
-                        </div>
-
-                        <!-- Wall Crushing Friction -->
-                        <div class="slider-row">
-                            <div class="slider-label">
-                                <span>Wall Crushing Friction Resistance</span>
-                                <span id="frictionLabel">1.6x</span>
-                            </div>
-                            <input type="range" id="frictionSlider" min="0.5" max="3.0" step="0.1" value="1.6">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <script>
-            // Audio Siren Synthesizer via Web Audio API
-            let audioCtx = null;
-            let sirenOsc = null;
-            let sirenGain = null;
-            let soundEnabled = true;
-            let isSirenPlaying = false;
-
-            function initAudio() {{
-                if (!audioCtx) {{
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    if (AudioContext) audioCtx = new AudioContext();
-                }}
-                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-            }}
-
-            function startSiren(isCritical) {{
-                if (!soundEnabled) return;
-                initAudio();
-                if (!audioCtx) return;
-
-                if (!isSirenPlaying) {{
-                    sirenOsc = audioCtx.createOscillator();
-                    sirenGain = audioCtx.createGain();
-                    sirenOsc.type = 'sawtooth';
-                    sirenGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                    sirenOsc.connect(sirenGain);
-                    sirenGain.connect(audioCtx.destination);
-                    sirenOsc.start();
-                    isSirenPlaying = true;
-                }}
-
-                if (sirenOsc && audioCtx) {{
-                    const now = audioCtx.currentTime;
-                    const freq1 = isCritical ? 880 : 540;
-                    const freq2 = isCritical ? 620 : 420;
-                    const period = isCritical ? 0.35 : 0.7;
-
-                    sirenOsc.frequency.cancelScheduledValues(now);
-                    sirenOsc.frequency.setValueAtTime(freq1, now);
-                    sirenOsc.frequency.linearRampToValueAtTime(freq2, now + period * 0.5);
-                    sirenOsc.frequency.linearRampToValueAtTime(freq1, now + period);
-                }}
-            }}
-
-            function stopSiren() {{
-                if (isSirenPlaying && sirenOsc) {{
-                    try {{
-                        sirenOsc.stop();
-                        sirenOsc.disconnect();
-                    }} catch (e) {{}}
-                    isSirenPlaying = false;
-                    sirenOsc = null;
-                }}
-            }}
-
-            // Sound Toggle UI
-            const btnSound = document.getElementById('btnSoundToggle');
-            btnSound.onclick = () => {{
-                initAudio();
-                soundEnabled = !soundEnabled;
-                if (soundEnabled) {{
-                    btnSound.className = 'sound-toggle-btn active';
-                    btnSound.innerHTML = '<span>🔊</span> Audio Siren: ON';
-                }} else {{
-                    btnSound.className = 'sound-toggle-btn';
-                    btnSound.innerHTML = '<span>🔇</span> Audio Siren: MUTED';
-                    stopSiren();
-                }}
-            }};
-
-            // Canvas Setup
-            const canvas = document.getElementById('simCanvas');
-            const ctx = canvas.getContext('2d');
-            const mCanvas = document.getElementById('momentumCanvas');
-            const mCtx = mCanvas.getContext('2d');
-
-            function resizeCanvases() {{
-                const box = document.getElementById('canvasBox');
-                canvas.width = box.clientWidth;
-                canvas.height = box.clientHeight;
-                mCanvas.width = mCanvas.parentElement.clientWidth - 28;
-                mCanvas.height = 48;
-            }}
-            window.addEventListener('resize', resizeCanvases);
-            resizeCanvases();
-
-            // Simulation Config & Variables
-            let isRunning = true;
-            let gateLocked = false;
-            let exitGateWidth = 110;
-            let inflowRatePerSec = 4;
-            let contagionSpeed = 1.5;
-            let wallFriction = 1.6;
-            let smoothedPsi = 18.0;
-            let lastTime = performance.now();
-            let frameCount = 0;
-            let fps = 60;
-            let totalEvacuated = 0;
-            let spawnAccumulator = 0;
-            let clickMode = 'pillar';
-            const historyPsi = [];
-
-            // Sectors Configuration: 4 Rows (A, B, C, D) x 5 Columns (1, 2, 3, 4, 5)
-            const sectorRows = ['A', 'B', 'C', 'D'];
-            const sectorCols = [1, 2, 3, 4, 5];
-
-            // Incident Distress Epicenters
-            let panicIncidents = [];
-
-            // Obstacles / Deflection Pillars
-            let obstacles = [
-                {{ x: 0, y: 0, r: 24 }}
-            ];
-
-            function repositionInitialObstacles() {{
-                obstacles[0].x = canvas.width * 0.58;
-                obstacles[0].y = canvas.height * 0.50;
-            }}
-            repositionInitialObstacles();
-
-            // Click Mode Switchers
-            const toolPillar = document.getElementById('toolPillar');
-            const toolPanic = document.getElementById('toolPanic');
-            const helperTip = document.getElementById('helperTip');
-
-            toolPillar.onclick = () => {{
-                clickMode = 'pillar';
-                toolPillar.className = 'mode-btn active';
-                toolPanic.className = 'mode-btn';
-                helperTip.innerHTML = '💡 <strong>Pillar Tool</strong>: Click anywhere to drop or remove a deflection pillar.';
-            }};
-
-            toolPanic.onclick = () => {{
-                clickMode = 'panic';
-                toolPanic.className = 'mode-btn active';
-                toolPillar.className = 'mode-btn';
-                helperTip.innerHTML = '🔥 <strong>Panic Tool</strong>: Click ANYWHERE inside the crowd to ignite a surprise incident/distress epicenter!';
-            }};
-
-            // Canvas Click Handler
-            canvas.addEventListener('click', (e) => {{
-                initAudio();
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                const clickX = (e.clientX - rect.left) * scaleX;
-                const clickY = (e.clientY - rect.top) * scaleY;
-
-                if (clickMode === 'pillar') {{
-                    let removed = false;
-                    for (let i = 0; i < obstacles.length; i++) {{
-                        if (Math.hypot(clickX - obstacles[i].x, clickY - obstacles[i].y) < obstacles[i].r + 10) {{
-                            obstacles.splice(i, 1);
-                            removed = true;
-                            break;
-                        }}
-                    }}
-                    if (!removed) {{
-                        obstacles.push({{ x: clickX, y: clickY, r: 22 }});
-                    }}
-                }} else if (clickMode === 'panic') {{
-                    triggerIncidentAt(clickX, clickY, 180);
-                }}
-            }});
-
-            function triggerIncidentAt(x, y, radius = 180) {{
-                panicIncidents.push({{
-                    x: x,
-                    y: y,
-                    maxRadius: radius,
-                    currentRadius: 10,
-                    age: 0,
-                    life: 240
-                }});
-            }}
-
-            // Particle Class: Natural Space-filling Movement & Body Mechanics
-            class Person {{
-                constructor(w, h, startRandom = false) {{
-                    const wallUpperY = h * 0.12;
-                    const wallLowerY = h * 0.88;
-                    const gateX = w * 0.78;
-
-                    if (startRandom) {{
-                        this.x = Math.random() * (gateX * 0.85) + 30;
-                        this.y = wallUpperY + 15 + Math.random() * (wallLowerY - wallUpperY - 30);
-                    }} else {{
-                        this.x = -15 - Math.random() * 40;
-                        this.y = wallUpperY + 20 + Math.random() * (wallLowerY - wallUpperY - 40);
-                    }}
-
-                    // Heterogeneous walking speeds and body dimensions
-                    this.baseSpeed = 1.8 + Math.random() * 1.5;
-                    this.vx = this.baseSpeed;
-                    this.vy = (Math.random() - 0.5) * 0.6;
-                    this.radius = 8.0 + Math.random() * 3.5;
-                    this.mass = this.radius * 0.15;
-                    this.panicLevel = 0.0;
-                    this.contactStress = 0.0;
-                }}
-            }}
-
-            let people = [];
-            function initPeople() {{
-                people = [];
-                for (let i = 0; i < {initial_particles}; i++) {{
-                    people.push(new Person(canvas.width, canvas.height, true));
-                }}
-            }}
-            initPeople();
-
-            // Photoelastic Birefringence Color Table (Michel-Levy Orders)
-            function getPhotoelasticColor(s, alpha = 0.6) {{
-                let r, g, b;
-                if (s < 0.25) {{
-                    const t = s / 0.25;
-                    r = 15 + t * 10;
-                    g = 45 + t * 115;
-                    b = 100 + t * 140;
-                }} else if (s < 0.50) {{
-                    const t = (s - 0.25) / 0.25;
-                    r = 25 + t * 220;
-                    g = 160 + t * 55;
-                    b = 240 - t * 200;
-                }} else if (s < 0.75) {{
-                    const t = (s - 0.50) / 0.25;
-                    r = 245 - t * 10;
-                    g = 215 - t * 185;
-                    b = 40 + t * 15;
-                }} else {{
-                    const t = (s - 0.75) / 0.25;
-                    r = 235 + t * 20;
-                    g = 30 - t * 20;
-                    b = 55 + t * 130;
-                }}
-                return `rgba(${{Math.round(r)}}, ${{Math.round(g)}}, ${{Math.round(b)}}, ${{alpha}})`;
-            }}
-
-            // Action Buttons
-            document.getElementById('btnRandomIncident').onclick = () => {{
-                initAudio();
-                const w = canvas.width;
-                const h = canvas.height;
-                const wallUpperY = h * 0.12;
-                const wallLowerY = h * 0.88;
-                const randX = Math.random() * (w * 0.60) + (w * 0.15);
-                const randY = wallUpperY + 30 + Math.random() * (wallLowerY - wallUpperY - 60);
-                triggerIncidentAt(randX, randY, 220);
-            }};
-
-            document.getElementById('btnCalmDown').onclick = () => {{
-                panicIncidents = [];
-                for (let i = 0; i < people.length; i++) {{
-                    people[i].panicLevel = 0.0;
-                }}
-                stopSiren();
-            }};
-
-            document.getElementById('btnToggleGate').onclick = () => {{
-                initAudio();
-                gateLocked = !gateLocked;
-                document.getElementById('btnToggleGate').innerText = gateLocked ? '🚪 Unlock Exit Gate' : '🚪 Lock Exit Gate';
-                document.getElementById('gateStateText').innerText = gateLocked ? 'LOCKED (0px)' : `OPEN (${{exitGateWidth}}px)`;
-                document.getElementById('gateStateText').style.color = gateLocked ? '#FF3366' : '#00E5FF';
-            }};
-
-            document.getElementById('btnClearPillars').onclick = () => {{
-                obstacles = [];
-            }};
-
-            // Slider Listeners
-            document.getElementById('contagionSlider').oninput = (e) => {{
-                contagionSpeed = parseFloat(e.target.value);
-                document.getElementById('contagionLabel').innerText = `${{contagionSpeed.toFixed(1)}}x`;
-            }};
-
-            document.getElementById('inflowSlider').oninput = (e) => {{
-                inflowRatePerSec = parseInt(e.target.value);
-                document.getElementById('inflowLabel').innerText = `${{inflowRatePerSec}} arrivals/s`;
-            }};
-
-            document.getElementById('gateWidthSlider').oninput = (e) => {{
-                exitGateWidth = parseInt(e.target.value);
-                document.getElementById('gateWidthLabel').innerText = `${{exitGateWidth}} px`;
-                if (!gateLocked) {{
-                    document.getElementById('gateStateText').innerText = `OPEN (${{exitGateWidth}}px)`;
-                }}
-            }};
-
-            document.getElementById('frictionSlider').oninput = (e) => {{
-                wallFriction = parseFloat(e.target.value);
-                document.getElementById('frictionLabel').innerText = `${{wallFriction.toFixed(1)}}x`;
-            }};
-
-            document.getElementById('btnAcknowledge').onclick = () => {{
-                stopSiren();
-            }};
-
-            // Main Simulation Loop
-            function updateAndRender() {{
-                const now = performance.now();
-                frameCount++;
-                if (now - lastTime >= 1000) {{
-                    fps = frameCount;
-                    frameCount = 0;
-                    lastTime = now;
-                    document.getElementById('fpsVal').innerText = fps;
-                }}
-
-                if (isRunning) {{
-                    const w = canvas.width;
-                    const h = canvas.height;
-                    const gateX = w * 0.78;
-                    const gateY = h * 0.50;
-                    const effectiveGateWidth = gateLocked ? 0 : exitGateWidth;
-                    const wallUpperY = h * 0.12;
-                    const wallLowerY = h * 0.88;
-
-                    // 1. Inflow Spawn
-                    spawnAccumulator += (inflowRatePerSec / 60.0);
-                    while (spawnAccumulator >= 1.0) {{
-                        spawnAccumulator -= 1.0;
-                        if (people.length < 480) {{
-                            people.push(new Person(w, h, false));
-                        }}
-                    }}
-
-                    // 2. Expand Panic Incidents
-                    for (let j = panicIncidents.length - 1; j >= 0; j--) {{
-                        const inc = panicIncidents[j];
-                        inc.age++;
-                        inc.currentRadius += (3.5 * contagionSpeed);
-
-                        for (let i = 0; i < people.length; i++) {{
-                            const p = people[i];
-                            const dist = Math.hypot(p.x - inc.x, p.y - inc.y);
-                            if (dist < inc.currentRadius) {{
-                                p.panicLevel = Math.min(1.0, p.panicLevel + 0.35 * contagionSpeed);
-                            }}
-                        }}
-
-                        if (inc.currentRadius > inc.maxRadius || inc.age > inc.life) {{
-                            panicIncidents.splice(j, 1);
-                        }}
-                    }}
-
-                    // Grid Accumulator for Stress Field
-                    const blockSize = 24;
-                    const cols = Math.ceil(w / blockSize);
-                    const rows = Math.ceil(h / blockSize);
-                    const gridCount = new Float32Array(cols * rows);
-                    const gridVx = new Float32Array(cols * rows);
-                    const gridVy = new Float32Array(cols * rows);
-                    const gridContactPressure = new Float32Array(cols * rows);
-                    const gridPanic = new Float32Array(cols * rows);
-
-                    // 3. PHYSICAL DESIRED FORCE & SPACE-FILLING NAVIGATION
-                    // Key Fix #1 & #3: People DO NOT diagonally funnel from the far back of the room!
-                    // They march straight forward parallel to the corridor walls, spreading out.
-                    // Only within distanceThreshold (~90px) from the front barrier do they guide along the wall toward the door opening.
-                    const funnelDistanceThreshold = 100;
-
-                    for (let i = 0; i < people.length; i++) {{
-                        const p = people[i];
-                        p.contactStress = 0.0;
-
-                        let desiredVx = p.baseSpeed;
-                        let desiredVy = 0.0;
-
-                        if (p.x < gateX - funnelDistanceThreshold) {{
-                            // In the main arena: walk forward across full room width
-                            // Slight lane meandering
-                            desiredVx = p.baseSpeed * (1.0 + p.panicLevel * 1.2);
-                            desiredVy = p.vy * 0.8;
-                        }} else if (p.x <= gateX + 15) {{
-                            // Approaching the front barrier wall!
-                            // Target the exit opening, or if blocked by wall, slide laterally along the wall
-                            const dy = gateY - p.y;
-                            const isAlignedWithExit = Math.abs(dy) <= effectiveGateWidth * 0.45;
-
-                            if (isAlignedWithExit) {{
-                                desiredVx = p.baseSpeed * (1.1 + p.panicLevel * 1.5);
-                                desiredVy = (dy / (Math.abs(dy) + 1.0)) * p.baseSpeed * 0.8;
-                            }} else {{
-                                // Need to slide laterally along the barrier wall towards the door
-                                desiredVx = p.baseSpeed * 0.3; // forward movement checked by wall
-                                const slideDir = dy > 0 ? 1.0 : -1.0;
-                                desiredVy = slideDir * p.baseSpeed * (1.2 + p.panicLevel * 1.2);
-                            }}
-                        }} else {{
-                            // Evacuated past the gate: FAN OUT RADIALLY (Key Fix #6)
-                            desiredVx = p.baseSpeed * 1.4;
-                            desiredVy = (p.y - gateY) * 0.12; // Radial outward fanning!
-                        }}
-
-                        // Relaxation towards desired velocity
-                        p.vx += 0.20 * (desiredVx - p.vx);
-                        p.vy += 0.20 * (desiredVy - p.vy);
-                    }}
-
-                    // 4. HARD-BODY INTER-AGENT PACKING & COMPRESSIVE PUSH TRANSMISSION (Key Fix #2 & #10)
-                    // Multi-pass contact relaxation to prevent overlapping and transmit crush pressure
-                    for (let pass = 0; pass < 2; pass++) {{
-                        for (let i = 0; i < people.length; i++) {{
-                            const p1 = people[i];
-                            for (let j = i + 1; j < people.length; j++) {{
-                                const p2 = people[j];
-                                const dx = p2.x - p1.x;
-                                const dy = p2.y - p1.y;
-                                const dist = Math.hypot(dx, dy);
-                                const minDist = p1.radius + p2.radius;
-
-                                if (dist < minDist && dist > 0.001) {{
-                                    const overlap = minDist - dist;
-                                    const nx = dx / dist;
-                                    const ny = dy / dist;
-
-                                    // Hard contact separation
-                                    const mTotal = p1.mass + p2.mass;
-                                    const r1 = p2.mass / mTotal;
-                                    const r2 = p1.mass / mTotal;
-
-                                    p1.x -= nx * overlap * r1;
-                                    p1.y -= ny * overlap * r1;
-                                    p2.x += nx * overlap * r2;
-                                    p2.y += ny * overlap * r2;
-
-                                    // Contact compressive stress accumulation
-                                    const pushMagnitude = overlap * 2.8 * (1.0 + Math.max(p1.panicLevel, p2.panicLevel));
-                                    p1.contactStress += pushMagnitude;
-                                    p2.contactStress += pushMagnitude;
-
-                                    // Push transmission: rear person pushes front person forward!
-                                    if (p1.x < p2.x) {{
-                                        p2.vx += p1.vx * 0.12;
-                                    }} else {{
-                                        p1.vx += p2.vx * 0.12;
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }}
-
-                    // 5. PHYSICAL WALL & BARRIER HARD CONTACT (Key Fix #4 & #5)
-                    for (let i = people.length - 1; i >= 0; i--) {{
-                        const p = people[i];
-
-                        // Pillar / Obstacle Hard Collisions
-                        for (let o = 0; o < obstacles.length; o++) {{
-                            const obst = obstacles[o];
-                            const odx = p.x - obst.x;
-                            const ody = p.y - obst.y;
-                            const oDist = Math.hypot(odx, ody);
-                            const minDist = p.radius + obst.r;
-
-                            if (oDist < minDist && oDist > 0.001) {{
-                                const nx = odx / oDist;
-                                const ny = ody / oDist;
-                                const overlap = minDist - oDist;
-
-                                p.x += nx * overlap;
-                                p.y += ny * overlap;
-
-                                const dot = p.vx * nx + p.vy * ny;
-                                if (dot < 0) {{
-                                    p.vx -= 1.4 * dot * nx;
-                                    p.vy -= 1.4 * dot * ny;
-                                }}
-                                p.contactStress += overlap * 3.5;
-                            }}
-                        }}
-
-                        // Upper & Lower Boundary Wall Collisions
-                        if (p.y - p.radius < wallUpperY) {{
-                            const overlap = wallUpperY - (p.y - p.radius);
-                            p.y = wallUpperY + p.radius;
-                            p.vy = Math.abs(p.vy) * 0.2;
-                            p.vx *= Math.max(0.2, 1.0 - 0.25 * wallFriction);
-                            p.contactStress += (overlap * 4.0 + Math.abs(p.vy) * 2.0) * wallFriction;
-                        }} else if (p.y + p.radius > wallLowerY) {{
-                            const overlap = (p.y + p.radius) - wallLowerY;
-                            p.y = wallLowerY - p.radius;
-                            p.vy = -Math.abs(p.vy) * 0.2;
-                            p.vx *= Math.max(0.2, 1.0 - 0.25 * wallFriction);
-                            p.contactStress += (overlap * 4.0 + Math.abs(p.vy) * 2.0) * wallFriction;
-                        }}
-
-                        // Front Barrier Wall Collisions
-                        // SOLID WALL everywhere except inside exit slot!
-                        const isAtGateLine = p.x + p.radius >= gateX && p.x - p.radius <= gateX + 16;
-                        const isOutsideExitSlot = Math.abs(p.y - gateY) > (effectiveGateWidth * 0.5 - 2);
-
-                        if (isAtGateLine && isOutsideExitSlot) {{
-                            const overlap = (p.x + p.radius) - gateX;
-                            p.x = gateX - p.radius;
-
-                            // High normal contact pressure directly at the barrier wall!
-                            const wallNormalCrush = (Math.abs(p.vx) * 4.0 + overlap * 5.0 + 4.0) * wallFriction;
-                            p.contactStress += wallNormalCrush;
-
-                            p.vx = -Math.abs(p.vx) * 0.1;
-                            // Forced lateral slide toward the exit gap
-                            const slideDir = (gateY > p.y) ? 1.0 : -1.0;
-                            p.vy += slideDir * (2.5 + Math.random() * 2.5);
-                        }}
-
-                        // Position Integration
-                        p.x += p.vx;
-                        p.y += p.vy;
-
-                        // Evacuation Complete
-                        if (p.x > w + 20) {{
-                            people.splice(i, 1);
-                            totalEvacuated++;
-                            continue;
-                        }}
-
-                        // Accumulate Grid Data
-                        const gx = Math.min(cols - 1, Math.max(0, Math.floor(p.x / blockSize)));
-                        const gy = Math.min(rows - 1, Math.max(0, Math.floor(p.y / blockSize)));
-                        const gIdx = gy * cols + gx;
-                        gridCount[gIdx]++;
-                        gridVx[gIdx] += p.vx;
-                        gridVy[gIdx] += p.vy;
-                        gridContactPressure[gIdx] += p.contactStress;
-                        gridPanic[gIdx] += p.panicLevel;
-                    }}
-
-                    // Update HUD Numbers
-                    document.getElementById('agentCountVal').innerText = people.length;
-                    document.getElementById('evacCountVal').innerText = totalEvacuated;
-
-                    // 6. ACCURATE PHOTOELASTIC STRESS FIELD BASED ON CONTACT CRUSH PRESSURE (Key Fix #5 & #12)
-                    let maxStress = 0;
-                    let hotspotX = gateX - 25;
-                    let hotspotY = gateY;
-
-                    const stressField = new Float32Array(cols * rows);
-                    for (let gy = 0; gy < rows; gy++) {{
-                        for (let gx = 0; gx < cols; gx++) {{
-                            const idx = gy * cols + gx;
-                            const count = gridCount[idx];
-                            const contactCrush = gridContactPressure[idx];
-
-                            if (count > 0 || contactCrush > 0) {{
-                                const rho = Math.min(1.0, count / 5.5);
-                                const crushNorm = Math.min(1.0, contactCrush / 14.0);
-
-                                // Real stress is dominated by compressive contact crush & wall pinning!
-                                const s = Math.min(100, (rho * 20 + crushNorm * 65 + (count > 0 ? gridPanic[idx] / count : 0) * 15) * 1.05);
-                                stressField[idx] = s;
-                                if (s > maxStress) {{
-                                    maxStress = s;
-                                    hotspotX = (gx + 0.5) * blockSize;
-                                    hotspotY = (gy + 0.5) * blockSize;
-                                }}
-                            }}
-                        }}
-                    }}
-
-                    // Asymmetric EMA smoothing
-                    const alpha = maxStress > smoothedPsi ? 0.35 : 0.08;
-                    smoothedPsi = alpha * maxStress + (1 - alpha) * smoothedPsi;
-
-                    historyPsi.push(smoothedPsi);
-                    if (historyPsi.length > 80) historyPsi.shift();
-
-                    // Sector Coordinate Math (Rows A-D, Cols 1-5)
-                    const sectorColIdx = Math.min(4, Math.max(0, Math.floor((hotspotX / w) * 5)));
-                    const sectorRowIdx = Math.min(3, Math.max(0, Math.floor(((hotspotY - wallUpperY) / (wallLowerY - wallUpperY)) * 4)));
-                    const peakSectorName = `${{sectorRows[sectorRowIdx]}}${{sectorCols[sectorColIdx]}}`;
-
-                    // Update UI Telemetry & Audio Siren
-                    updateTelemetry(smoothedPsi, peakSectorName);
-
-                    // 7. RENDER DARKFIELD POLARISCOPE & PHOTOELASTIC INTERFERENCE FRINGES
-                    ctx.clearRect(0, 0, w, h);
-                    ctx.fillStyle = '#060B18';
-                    ctx.fillRect(0, 0, w, h);
-
-                    // Sector Grid
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-                    ctx.lineWidth = 1;
-                    const secW = w / 5;
-                    const secH = (wallLowerY - wallUpperY) / 4;
-
-                    for (let c = 1; c < 5; c++) {{
-                        ctx.beginPath();
-                        ctx.moveTo(c * secW, wallUpperY);
-                        ctx.lineTo(c * secW, wallLowerY);
-                        ctx.stroke();
-                    }}
-                    for (let r = 1; r < 4; r++) {{
-                        ctx.beginPath();
-                        ctx.moveTo(0, wallUpperY + r * secH);
-                        ctx.lineTo(w, wallUpperY + r * secH);
-                        ctx.stroke();
-                    }}
-
-                    // Sector Coordinate Labels
-                    ctx.font = '10px JetBrains Mono';
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-                    for (let r = 0; r < 4; r++) {{
-                        for (let c = 0; c < 5; c++) {{
-                            ctx.fillText(`${{sectorRows[r]}}${{sectorCols[c]}}`, c * secW + 8, wallUpperY + r * secH + 16);
-                        }}
-                    }}
-
-                    // Entry & Exit Labels
-                    ctx.fillStyle = 'rgba(0, 229, 255, 0.4)';
-                    ctx.font = '11px JetBrains Mono';
-                    ctx.fillText('➔ INGRESS (ENTRY)', 15, wallUpperY - 8);
-                    ctx.fillStyle = 'rgba(16, 185, 129, 0.6)';
-                    ctx.fillText('EVACUATION EXIT ➔', gateX - 40, wallUpperY - 8);
-
-                    // Continuous Photoelastic Stress Fringes (High intensity AT WALLS AND CONTACTS!)
-                    for (let gy = 0; gy < rows; gy++) {{
-                        for (let gx = 0; gx < cols; gx++) {{
-                            const s = stressField[gy * cols + gx];
-                            if (s > 4) {{
-                                const normS = s / 100.0;
-                                const rad = blockSize * 1.6;
-                                const px = (gx + 0.5) * blockSize;
-                                const py = (gy + 0.5) * blockSize;
-
-                                const grad = ctx.createRadialGradient(px, py, 2, px, py, rad);
-                                grad.addColorStop(0, getPhotoelasticColor(normS, Math.min(0.88, 0.22 + normS * 0.75)));
-                                grad.addColorStop(1, 'rgba(6, 11, 24, 0)');
-
-                                ctx.fillStyle = grad;
-                                ctx.beginPath();
-                                ctx.arc(px, py, rad, 0, Math.PI * 2);
-                                ctx.fill();
-                            }}
-                        }}
-                    }}
-
-                    // Panic Incident Waves
-                    for (let j = 0; j < panicIncidents.length; j++) {{
-                        const inc = panicIncidents[j];
-                        ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)';
-                        ctx.lineWidth = 2.5;
-                        ctx.beginPath();
-                        ctx.arc(inc.x, inc.y, inc.currentRadius, 0, Math.PI * 2);
-                        ctx.stroke();
-
-                        ctx.fillStyle = '#EF4444';
-                        ctx.beginPath();
-                        ctx.arc(inc.x, inc.y, 8, 0, Math.PI * 2);
-                        ctx.fill();
-                    }}
-
-                    // Iso-Stress Contour Rings centered on peak crush
-                    if (smoothedPsi > 42) {{
-                        ctx.strokeStyle = smoothedPsi >= 75 ? 'rgba(255, 51, 102, 0.75)' : 'rgba(255, 179, 0, 0.65)';
-                        ctx.lineWidth = 1.5;
-                        ctx.beginPath();
-                        ctx.ellipse(hotspotX, hotspotY, 68, 48, 0, 0, Math.PI * 2);
-                        ctx.stroke();
-                    }}
-
-                    // Solid Boundary Walls
-                    ctx.fillStyle = '#1E293B';
-                    ctx.fillRect(0, 0, w, wallUpperY);
-                    ctx.strokeStyle = '#00E5FF';
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.moveTo(0, wallUpperY);
-                    ctx.lineTo(w, wallUpperY);
-                    ctx.stroke();
-
-                    ctx.fillRect(0, wallLowerY, w, h - wallLowerY);
-                    ctx.beginPath();
-                    ctx.moveTo(0, wallLowerY);
-                    ctx.lineTo(w, wallLowerY);
-                    ctx.stroke();
-
-                    // Exit Barrier Barricade
-                    ctx.strokeStyle = gateLocked ? '#FF3366' : '#00E5FF';
-                    ctx.lineWidth = 8;
-                    ctx.beginPath();
-                    ctx.moveTo(gateX, wallUpperY);
-                    ctx.lineTo(gateX, gateY - effectiveGateWidth * 0.5);
-                    ctx.moveTo(gateX, gateY + effectiveGateWidth * 0.5);
-                    ctx.lineTo(gateX, wallLowerY);
-                    ctx.stroke();
-
-                    // Deflection Pillars / Columns
-                    for (let o = 0; o < obstacles.length; o++) {{
-                        const obst = obstacles[o];
-                        ctx.fillStyle = '#0F172A';
-                        ctx.beginPath();
-                        ctx.arc(obst.x, obst.y, obst.r, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        ctx.strokeStyle = '#00E5FF';
-                        ctx.lineWidth = 3;
-                        ctx.stroke();
-
-                        ctx.fillStyle = '#38BDF8';
-                        ctx.beginPath();
-                        ctx.arc(obst.x, obst.y, obst.r * 0.45, 0, Math.PI * 2);
-                        ctx.fill();
-                    }}
-
-                    // Render Crowd Particles with Photoelastic Highlights
-                    for (let i = 0; i < people.length; i++) {{
-                        const p = people[i];
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-
-                        if (p.contactStress >= 12.0 || p.panicLevel > 0.6) {{
-                            ctx.fillStyle = '#FF3366';
-                            ctx.shadowColor = '#FF3366';
-                            ctx.shadowBlur = 10;
-                        }} else if (p.contactStress >= 5.0 || p.panicLevel > 0.2) {{
-                            ctx.fillStyle = '#FFB300';
-                            ctx.shadowColor = '#FFB300';
-                            ctx.shadowBlur = 6;
-                        }} else {{
-                            ctx.fillStyle = '#E2E8F0';
-                            ctx.shadowBlur = 0;
-                        }}
-
-                        ctx.fill();
-                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-                        ctx.lineWidth = 1;
-                        ctx.stroke();
-                        ctx.shadowBlur = 0;
-                    }}
-
-                    // Highlight Active Sector and Pulse Hotspot
-                    if (smoothedPsi > 45) {{
-                        const activeSecX = sectorColIdx * secW;
-                        const activeSecY = wallUpperY + sectorRowIdx * secH;
-                        ctx.strokeStyle = smoothedPsi >= 75 ? 'rgba(239, 68, 68, 0.85)' : 'rgba(245, 158, 11, 0.75)';
-                        ctx.lineWidth = 2.5;
-                        ctx.strokeRect(activeSecX, activeSecY, secW, secH);
-
-                        const pulse = 20 + 8 * Math.sin(now * 0.008);
-                        ctx.strokeStyle = '#FF3366';
-                        ctx.lineWidth = 2.5;
-                        ctx.beginPath();
-                        ctx.arc(hotspotX, hotspotY, pulse, 0, Math.PI * 2);
-                        ctx.stroke();
-                    }}
-
-                    // Render Sparkline
-                    renderMomentumChart();
-                }}
-
-                requestAnimationFrame(updateAndRender);
-            }}
-
-            function updateTelemetry(psi, peakSector) {{
-                const psiElem = document.getElementById('psiVal');
-                const meterFill = document.getElementById('meterFill');
-                const statusPill = document.getElementById('statusPill');
-                const statusLabel = document.getElementById('statusLabel');
-                const sectorTag = document.getElementById('sectorTag');
-                const peakSectorHud = document.getElementById('peakSectorHud');
-                const banner = document.getElementById('actionBanner');
-                const actionTitle = document.getElementById('actionTitle');
-                const actionDesc = document.getElementById('actionDesc');
-                const dispatchBox = document.getElementById('dispatchBox');
-                const dispatchText = document.getElementById('dispatchText');
-
-                psiElem.innerText = psi.toFixed(1);
-                meterFill.style.width = Math.min(100, psi) + '%';
-                sectorTag.innerText = `SECTOR ${{peakSector}}`;
-                peakSectorHud.innerText = peakSector;
-
-                if (psi >= 75) {{
-                    psiElem.style.color = '#FF3366';
-                    psiElem.style.textShadow = '0 0 25px rgba(255, 51, 102, 0.6)';
-                    meterFill.style.background = '#FF3366';
-                    statusPill.className = 'status-pill status-critical';
-                    statusLabel.innerText = 'CRITICAL SURGE';
-                    banner.className = 'alert-box status-critical';
-                    actionTitle.innerText = `🚨 STAMPEDE CRUSH DANGER IN SECTOR ${{peakSector}}`;
-                    actionDesc.innerText = 'Panic contagion & chokepoint crush! Dispatch emergency marshals immediately.';
-                    dispatchBox.style.display = 'flex';
-                    dispatchText.innerText = `🚨 DISPATCH MARSHALS IMMEDIATELY ➔ SECTOR ${{peakSector}}`;
-
-                    startSiren(true);
-
-                }} else if (psi >= 50) {{
-                    psiElem.style.color = '#FFB300';
-                    psiElem.style.textShadow = '0 0 20px rgba(255, 179, 0, 0.5)';
-                    meterFill.style.background = '#FFB300';
-                    statusPill.className = 'status-pill status-warning';
-                    statusLabel.innerText = 'ELEVATED WARNING';
-                    banner.className = 'alert-box status-warning';
-                    actionTitle.innerText = `⚠️ ELEVATED COMPRESSION AT SECTOR ${{peakSector}}`;
-                    actionDesc.innerText = 'Localized agitation spreading. Throttle gate by 50% to ease compression.';
-                    dispatchBox.style.display = 'flex';
-                    dispatchText.innerText = `⚠️ ADVISORY ALERT ➔ MONITOR SECTOR ${{peakSector}}`;
-
-                    startSiren(false);
-
-                }} else {{
-                    psiElem.style.color = '#00E5FF';
-                    psiElem.style.textShadow = '0 0 20px rgba(0, 229, 255, 0.4)';
-                    meterFill.style.background = '#00E5FF';
-                    statusPill.className = 'status-pill status-nominal';
-                    statusLabel.innerText = 'NOMINAL FLOW';
-                    banner.className = 'alert-box status-nominal';
-                    actionTitle.innerText = '✅ NORMAL FLOW';
-                    actionDesc.innerText = 'Inflow matches discharge capacity. Ingress & exit flowing safely.';
-                    dispatchBox.style.display = 'none';
-
-                    stopSiren();
-                }}
-            }}
-
-            function renderMomentumChart() {{
-                mCtx.clearRect(0, 0, mCanvas.width, mCanvas.height);
-                if (historyPsi.length < 2) return;
-
-                const mw = mCanvas.width;
-                const mh = mCanvas.height;
-
-                mCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-                mCtx.lineWidth = 1;
-                mCtx.beginPath();
-                mCtx.moveTo(0, mh * 0.5);
-                mCtx.lineTo(mw, mh * 0.5);
-                mCtx.moveTo(0, mh * 0.25);
-                mCtx.lineTo(mw, mh * 0.25);
-                mCtx.stroke();
-
-                mCtx.beginPath();
-                const step = mw / (historyPsi.length - 1);
-                for (let i = 0; i < historyPsi.length; i++) {{
-                    const x = i * step;
-                    const y = mh - (historyPsi[i] / 100.0) * mh;
-                    if (i === 0) mCtx.moveTo(x, y);
-                    else mCtx.lineTo(x, y);
-                }}
-
-                const latest = historyPsi[historyPsi.length - 1];
-                mCtx.strokeStyle = latest >= 75 ? '#FF3366' : (latest >= 50 ? '#FFB300' : '#00E5FF');
-                mCtx.lineWidth = 2.2;
-                mCtx.stroke();
-            }}
-
-            requestAnimationFrame(updateAndRender);
-        </script>
-    </body>
-    </html>
-    """
+def get_simulator_html(initial_particles: int = 115, initial_fps: int = 60) -> str:
+    """Generate the complete, self-contained ForceSight control-room console HTML."""
+    # We construct the HTML without f-string brackets to preserve JavaScript/CSS integrity.
+    html_template = """<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ForceSight Virtual Bench</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* Layout: a control-room console. Stage left (live crowd), instrument rail right. Dark by design. */
+:root {
+  --bg:#0D1114; --panel:#141B21; --panel2:#1B242C; --line:#28343D; --line2:#3A4A56;
+  --ink:#E8EFF4; --ink2:#93A4B1; --ink3:#64757F;
+  --steel:#4FB3D9; --good:#3E9E6B; --warn:#D9A33C; --crit:#D4513A;
+  --fd:"Barlow Condensed",'Arial Narrow',sans-serif;
+  --fb:"IBM Plex Sans",system-ui,sans-serif;
+  --fm:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+* { box-sizing:border-box; }
+body {
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--fb);
+  margin:0;
+  padding:0;
+  min-height:100%;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap {
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px 20px;
+  max-width:1500px;
+  margin:0 auto;
+}
+
+header {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  gap:12px 20px;
+  border-bottom:1px solid var(--line);
+  padding-bottom:12px;
+}
+.brand {
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  min-width:0;
+}
+.brand h1 {
+  font-family:var(--fd);
+  font-weight:700;
+  font-size:clamp(26px,4vw,38px);
+  letter-spacing:.5px;
+  margin:0;
+  line-height:1;
+  text-wrap:balance;
+}
+.brand .sub {
+  font-family:var(--fd);
+  font-size:15px;
+  letter-spacing:2.4px;
+  color:var(--ink3);
+  text-transform:uppercase;
+}
+.tabs {
+  display:flex;
+  gap:0;
+  border:1px solid var(--line2);
+  border-radius:3px;
+  overflow:hidden;
+  margin-left:auto;
+}
+.tabs button {
+  font-family:var(--fd);
+  font-size:15px;
+  letter-spacing:1.4px;
+  text-transform:uppercase;
+  background:transparent;
+  color:var(--ink2);
+  border:0;
+  padding:8px 14px;
+  cursor:pointer;
+  transition:background 0.15s, color 0.15s;
+}
+.tabs button[aria-selected="true"] {
+  background:var(--steel);
+  color:#06181F;
+  font-weight:600;
+}
+.tabs button:focus-visible {
+  outline:2px solid var(--steel);
+  outline-offset:-2px;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 352px;
+  gap:16px;
+  margin-top:14px;
+  align-items:start;
+}
+@media (max-width:900px) {
+  .grid { grid-template-columns:minmax(0,1fr); }
+}
+
+.stage {
+  min-width:0;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:4px;
+  overflow:hidden;
+}
+.toolbar {
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 16px;
+  align-items:center;
+  padding:10px 12px;
+  border-bottom:1px solid var(--line);
+  background:var(--panel2);
+}
+.ctl {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.ctl label {
+  font-family:var(--fd);
+  font-size:14px;
+  letter-spacing:1.3px;
+  text-transform:uppercase;
+  color:var(--ink2);
+  white-space:nowrap;
+}
+.ctl output {
+  font-family:var(--fm);
+  font-size:13px;
+  color:var(--ink);
+  min-width:48px;
+}
+input[type=range] {
+  width:104px;
+  accent-color:var(--steel);
+}
+button.btn {
+  font-family:var(--fd);
+  font-size:15px;
+  letter-spacing:1.3px;
+  text-transform:uppercase;
+  background:var(--panel);
+  color:var(--ink);
+  border:1px solid var(--line2);
+  border-radius:3px;
+  padding:7px 12px;
+  cursor:pointer;
+  transition:border-color 0.15s, color 0.15s, background 0.15s;
+}
+button.btn:hover {
+  border-color:var(--steel);
+  color:#fff;
+}
+button.btn:focus-visible {
+  outline:2px solid var(--steel);
+  outline-offset:2px;
+}
+button.btn.danger {
+  border-color:#6B2B20;
+  color:#F0A292;
+}
+button.btn.danger:hover {
+  background:var(--crit);
+  color:#120605;
+  border-color:var(--crit);
+}
+button.btn[aria-pressed="true"] {
+  background:var(--steel);
+  color:#06181F;
+  border-color:var(--steel);
+  font-weight:600;
+}
+.canvaswrap {
+  position:relative;
+  background:#080B0D;
+}
+canvas#view {
+  display:block;
+  width:100%;
+  height:clamp(300px,54vh,560px);
+}
+.ramp {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 12px;
+  border-top:1px solid var(--line);
+  background:var(--panel2);
+  flex-wrap:wrap;
+}
+.ramp .bar {
+  height:9px;
+  width:170px;
+  border-radius:2px;
+}
+.ramp span {
+  font-family:var(--fd);
+  font-size:13px;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  color:var(--ink3);
+}
+
+.rail {
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  min-width:0;
+}
+.alarm {
+  border-radius:4px;
+  padding:12px 14px;
+  border:1px solid var(--line2);
+  background:var(--panel);
+  transition:border-color 0.25s, background 0.25s;
+}
+.alarm .state {
+  font-family:var(--fd);
+  font-size:30px;
+  font-weight:700;
+  letter-spacing:2px;
+  line-height:1;
+  text-transform:uppercase;
+}
+.alarm .adv {
+  font-size:13px;
+  color:var(--ink2);
+  margin-top:6px;
+  line-height:1.45;
+}
+.alarm[data-l="0"] {
+  border-color:#1F4A36;
+  background:linear-gradient(180deg,#10211A,#141B21);
+}
+.alarm[data-l="0"] .state { color:var(--good); }
+.alarm[data-l="1"] {
+  border-color:#5C4518;
+  background:linear-gradient(180deg,#241C0C,#141B21);
+}
+.alarm[data-l="1"] .state { color:var(--warn); }
+.alarm[data-l="2"] {
+  border-color:#742B1E;
+  background:linear-gradient(180deg,#2B0F0A,#141B21);
+  animation:pulse 1.1s steps(2,end) infinite;
+}
+.alarm[data-l="2"] .state { color:var(--crit); }
+@keyframes pulse {
+  50% { border-color:var(--crit); background:linear-gradient(180deg,#45150D,#1A1115); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .alarm[data-l="2"] { animation:none; }
+}
+
+.tiles {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.tile {
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--line2);
+  border-radius:3px;
+  padding:9px 10px;
+}
+.tile .k {
+  font-family:var(--fd);
+  font-size:12.5px;
+  letter-spacing:1.3px;
+  text-transform:uppercase;
+  color:var(--ink3);
+  line-height:1.1;
+}
+.tile .v {
+  font-family:var(--fm);
+  font-weight:600;
+  font-size:21px;
+  margin-top:3px;
+  font-variant-numeric:tabular-nums;
+}
+.tile .u {
+  font-family:var(--fm);
+  font-size:11px;
+  color:var(--ink3);
+  margin-left:3px;
+}
+.tile .lim {
+  font-family:var(--fm);
+  font-size:10.5px;
+  color:var(--ink3);
+  margin-top:2px;
+}
+.tile[data-l="0"] { border-left-color:var(--good); }
+.tile[data-l="0"] .v { color:var(--ink); }
+.tile[data-l="1"] { border-left-color:var(--warn); }
+.tile[data-l="1"] .v { color:var(--warn); }
+.tile[data-l="2"] { border-left-color:var(--crit); }
+.tile[data-l="2"] .v { color:var(--crit); }
+
+.card {
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:3px;
+  padding:11px 12px;
+}
+.card h2 {
+  font-family:var(--fd);
+  font-size:14px;
+  letter-spacing:1.6px;
+  text-transform:uppercase;
+  color:var(--ink2);
+  margin:0 0 9px;
+  font-weight:600;
+}
+.pl {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-bottom:7px;
+}
+.pl .nm {
+  font-family:var(--fd);
+  font-size:13.5px;
+  letter-spacing:1px;
+  color:var(--ink2);
+  width:92px;
+  flex:none;
+}
+.pl .track {
+  flex:1;
+  height:11px;
+  background:#0B1013;
+  border:1px solid var(--line);
+  border-radius:2px;
+  overflow:hidden;
+  min-width:0;
+}
+.pl .fill {
+  height:100%;
+  width:0%;
+  background:var(--good);
+  transition:width .1s linear, background .2s;
+}
+.pl .num {
+  font-family:var(--fm);
+  font-size:12.5px;
+  width:62px;
+  text-align:right;
+  flex:none;
+  font-variant-numeric:tabular-nums;
+}
+canvas#chart {
+  display:block;
+  width:100%;
+  height:122px;
+  cursor:crosshair;
+}
+.chartnote {
+  font-family:var(--fm);
+  font-size:10.5px;
+  color:var(--ink3);
+  margin-top:5px;
+  min-height:14px;
+}
+ol.log {
+  list-style:none;
+  margin:0;
+  padding:0;
+  font-family:var(--fm);
+  font-size:11.5px;
+  line-height:1.55;
+  max-height:132px;
+  overflow-y:auto;
+}
+ol.log li {
+  display:flex;
+  gap:8px;
+  padding:2px 0;
+  border-bottom:1px solid #1B2229;
+}
+ol.log .ts {
+  color:var(--ink3);
+  flex:none;
+}
+ol.log .m {
+  min-width:0;
+  color:var(--ink2);
+}
+ol.log li[data-l="1"] .m { color:var(--warn); }
+ol.log li[data-l="2"] .m { color:var(--crit); }
+
+footer {
+  margin-top:16px;
+  border-top:1px solid var(--line);
+  padding-top:10px;
+  font-size:12px;
+  color:var(--ink3);
+  line-height:1.6;
+}
+footer b {
+  color:var(--ink2);
+  font-weight:500;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>ForceSight</h1>
+      <span class="sub">Virtual bench &amp; early-warning console</span>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Scenario">
+      <button id="tabGate" role="tab" aria-selected="true">Venue gate</button>
+      <button id="tabBench" role="tab" aria-selected="false">Lab bench</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="stage">
+      <div class="toolbar" id="toolbar">
+        <div class="ctl"><label for="inflow">Inflow</label><input type="range" id="inflow" min="0" max="10" step="0.2" value="3.6"><output id="inflowO">3.6/s</output></div>
+        <div class="ctl"><label for="gate">Gate</label><input type="range" id="gate" min="0.7" max="3.0" step="0.1" value="1.1"><output id="gateO">1.1 m</output></div>
+        <div class="ctl"><label for="press">Press</label><input type="range" id="press" min="0" max="100" step="1" value="0"><output id="pressO">0 %</output></div>
+        <button class="btn" id="pillar" aria-pressed="false">Pillar</button>
+        <button class="btn" id="viewBtn" aria-pressed="false">Camera view</button>
+        <button class="btn danger" id="surge">Surge</button>
+        <button class="btn danger" id="stop">Stop entry</button>
+        <button class="btn" id="auto" aria-pressed="false">Auto-stop</button>
+        <button class="btn" id="sound" aria-pressed="true">Sound</button>
+        <button class="btn" id="reset">Reset</button>
+      </div>
+      <div class="canvaswrap"><canvas id="view"></canvas></div>
+      <div class="ramp">
+        <span>Force on one person</span>
+        <div class="bar" id="rampBar"></div>
+        <span id="rampLo">0 N</span><span style="color:var(--line2)">&rarr;</span><span id="rampHi">1500 N+</span>
+        <span id="modeNote" style="margin-left:auto;color:var(--ink2)"></span>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="alarm" id="alarm" data-l="0" role="status" aria-live="polite">
+        <div class="state" id="alarmState">Safe</div>
+        <div class="adv" id="alarmAdv">Flow is free. Normal entry.</div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile" id="tDen" data-l="0"><div class="k">Density</div><div class="v"><span id="vDen">0.0</span><span class="u">/m&sup2;</span></div><div class="lim">amber 4 &middot; red 6</div></div>
+        <div class="tile" id="tPk" data-l="0"><div class="k">Peak force, one person</div><div class="v"><span id="vPk">0</span><span class="u">N</span></div><div class="lim">amber 800 &middot; red 2550</div></div>
+        <div class="tile" id="tPr" data-l="0"><div class="k">Peak &divide; average force</div><div class="v"><span id="vPr">0.0</span><span class="u">&times;</span></div><div class="lim">amber 3 &middot; red 5</div></div>
+        <div class="tile" id="tFl" data-l="0"><div class="k" id="kFl">Through gate</div><div class="v"><span id="vFl">0</span><span class="u" id="uFl">/min</span></div><div class="lim" id="lFl">people leaving</div></div>
+      </div>
+
+      <div class="card">
+        <h2 id="hwTitle">Barrier sensing panels</h2>
+        <div class="pl"><span class="nm" id="p1n">P1 above gate</span><span class="track"><span class="fill" id="p1f"></span></span><span class="num" id="p1v">0.00 kN</span></div>
+        <div class="pl"><span class="nm" id="p2n">P2 below gate</span><span class="track"><span class="fill" id="p2f"></span></span><span class="num" id="p2v">0.00 kN</span></div>
+        <div class="pl" id="row3" style="margin-bottom:0"><span class="nm" id="p3n">Load cell total</span><span class="track"><span class="fill" id="p3f"></span></span><span class="num" id="p3v">0.00 kN</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Peak force on one person &middot; last 40 s</h2>
+        <canvas id="chart"></canvas>
+        <div class="chartnote" id="chartNote">Dashed line: 2550 N, the force at which ribs fracture.</div>
+      </div>
+
+      <div class="card">
+        <h2>Event log</h2>
+        <ol class="log" id="log"></ol>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <b>What this is.</b> A live granular simulation. Each disc is one person, 0.42&ndash;0.52 m across, 60&ndash;85 kg. Contact forces use the Helbing social-force model (A&nbsp;=&nbsp;2000&nbsp;N, B&nbsp;=&nbsp;0.08&nbsp;m, k&nbsp;=&nbsp;1.2&times;10&#8309;&nbsp;kg/s&sup2;); each disc is shaded by the total contact force it carries, which is what the photoelastic bench shows as fringes. Peak &divide; average is the project’s own measure: crush injuries come from the worst-loaded person, not the average one. In the field the comparable published metric is crowd pressure, &rho;&nbsp;&times;&nbsp;Var(v), read from video (Helbing, Johansson &amp; Al-Abideen, 2007; turbulence above 0.02&nbsp;s&#8315;&sup2;). The 2550&nbsp;N rib-fracture figure is from Kroll et&nbsp;al. Thresholds are editable in the source and are set for teaching, not for operational use.
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var view = $("view"), vx = view.getContext("2d");
+var chart = $("chart"), cx = chart.getContext("2d");
+
+/* ---------- constants ---------- */
+var PH = {A:2000, B:0.08, KN:1.2e5, KT:2.4e5, TAU:0.5, G:0};
+var TH = {den:[4,6], pk:[800,2550], pr:[3,5]};
+var MAXV = 6, SUB = 8, FMAX = 24000;
+
+/* isochromatic (photoelastic) colour sequence, by fringe order */
+var ISO = [
+  [0,10,13,16], [0.22,38,46,52], [0.42,120,126,124], [0.58,232,231,214],
+  [0.78,241,214,113], [0.98,235,148,58], [1.14,206,70,58], [1.30,168,60,130],
+  [1.46,68,92,186], [1.62,58,150,170], [1.82,92,176,110], [2.02,206,196,90],
+  [2.24,224,140,70], [2.46,198,82,92], [2.68,120,96,176], [2.95,80,150,168]
+];
+
+function isoCol(n){
+  if(n > 2.95){ n = 1.30 + ((n - 1.30) % 1.65); }
+  for(var i = 1; i < ISO.length; i++){
+    if(n <= ISO[i][0]){
+      var a = ISO[i-1], b = ISO[i], t = (n - a[0]) / (b[0] - a[0]);
+      return "rgb(" + Math.round(a[1] + (b[1] - a[1]) * t) + "," +
+                      Math.round(a[2] + (b[2] - a[2]) * t) + "," +
+                      Math.round(a[3] + (b[3] - a[3]) * t) + ")";
+    }
+  }
+  return "rgb(80,150,168)";
+}
+
+/* sequential amber ramp on dark, for the plain force view */
+function forceCol(u){
+  u = u < 0 ? 0 : u > 1 ? 1 : u;
+  var s = [
+    [0,24,33,41], [0.3,92,74,46], [0.62,206,150,56], [0.85,242,196,86], [1,255,236,170]
+  ];
+  for(var i = 1; i < s.length; i++){
+    if(u <= s[i][0]){
+      var a = s[i-1], b = s[i], t = (u - a[0]) / (b[0] - a[0]);
+      return "rgb(" + Math.round(a[1] + (b[1] - a[1]) * t) + "," +
+                      Math.round(a[2] + (b[2] - a[2]) * t) + "," +
+                      Math.round(a[3] + (b[3] - a[3]) * t) + ")";
+    }
+  }
+  return "rgb(255,236,170)";
+}
+
+/* ---------- state ---------- */
+var S = {
+  scene:"gate", agents:[], t:0, spawnAcc:0, inflow:3.6, gateW:1.1, pillar:false,
+  press:0, photo:false, autoStop:false, sound:true, surgeT:0,
+  escaped:0, escWin:[], panels:[0,0,0], lvl:0, log:[], hist:[], histAcc:0,
+  plateY:0, pileTop:0,
+  m:{den:0, pk:0, mean:0, pr:0, flow:0}
+};
+var SC = {};   /* scene geometry */
+
+function sceneGate(){
+  SC = {w:14, h:7, wallX:10.4, type:"gate"};
+  SC.gy0 = (SC.h - S.gateW) / 2;
+  SC.gy1 = (SC.h + S.gateW) / 2;
+  SC.box = {x0:8.0, y0:1.5, x1:10.4, y1:5.5};
+  SC.pillar = {x:9.35, y:SC.h/2 + 0.70, r:0.33};
+}
+function sceneBench(){
+  SC = {w:8, h:7, type:"bench"};
+  SC.box = {x0:0, y0:0, x1:8, y1:7};
+}
+
+function mkAgent(x, y){
+  var r = 0.21 + Math.random() * 0.05;
+  return {x:x, y:y, vx:0, vy:0, sx:0, sy:0, r:r, m:60 + Math.random() * 25, f:0, fx:0, fy:0};
+}
+
+var INITIAL_COUNT = __INITIAL_PARTICLES__;
+
+function reset(){
+  S.agents = []; S.t = 0; S.escaped = 0; S.escWin = []; S.spawnAcc = 0;
+  S.hist = []; S.log = []; S.surgeT = 0; S.panels = [0,0,0]; S.lvl = 0;
+  if(S.scene === "gate"){
+    sceneGate();
+    for(var i = 0; i < INITIAL_COUNT; i++){
+      S.agents.push(mkAgent(0.4 + Math.random() * 7.4, 0.5 + Math.random() * (SC.h - 1)));
+    }
+  } else {
+    sceneBench();
+    /* a full cell, packed like a crowd: no in-plane gravity, the plate supplies the squeeze */
+    var rb = 0.255, dx = 2 * rb + 0.004, dy = dx * 0.88, row = 0;
+    for(var yy = 1.25; yy <= SC.h - rb; yy += dy){
+      for(var xx = rb + 0.12 + (row % 2 ? dx / 2 : 0); xx <= SC.w - rb - 0.12; xx += dx){
+        var ag = mkAgent(xx + (Math.random() - 0.5) * 0.03, yy + (Math.random() - 0.5) * 0.03);
+        ag.r = (row + Math.round(xx / dx)) % 3 === 2 ? 0.185 : rb;
+        S.agents.push(ag);
+      }
+      row++;
+    }
+    S.plateY = -2;
+    for(var k = 0; k < 80; k++) step(1/160);
+    S.pileTop = SC.h;
+    for(var q = 0; q < S.agents.length; q++){
+      var a2 = S.agents[q];
+      if(a2.y - a2.r < S.pileTop) S.pileTop = a2.y - a2.r;
+    }
+    S.plateY = S.pileTop - 0.02;
+    S.press = 0;
+    $("press").value = 0;
+    $("pressO").textContent = "0 %";
+  }
+  pushLog(0, "Simulation reset. " + (S.scene === "gate" ? "Venue gate scenario." : "Lab bench scenario."));
+  renderLog();
+}
+
+/* ---------- geometry helpers ---------- */
+function segs(){
+  if(SC.type === "gate") return [
+    [0, 0, SC.w, 0], [0, SC.h, SC.w, SC.h], [0, 0, 0, SC.h],
+    [SC.wallX, 0, SC.wallX, SC.gy0], [SC.wallX, SC.gy1, SC.wallX, SC.h]
+  ];
+  return [
+    [0, 0, 0, SC.h], [SC.w, 0, SC.w, SC.h], [0, SC.h, SC.w, SC.h], [0, S.plateY, SC.w, S.plateY]
+  ];
+}
+
+/* ---------- physics ---------- */
+function step(dt){
+  var A = S.agents, n = A.length, i, j, a, b;
+  var cell = 0.62, gw = Math.ceil(SC.w / cell) + 1, gh = Math.ceil(SC.h / cell) + 1, grid = {};
+  for(i = 0; i < n; i++){
+    a = A[i]; a.fx = 0; a.fy = 0; a.f = 0;
+    var gi = ((a.x / cell) | 0) * gh + ((a.y / cell) | 0);
+    (grid[gi] || (grid[gi] = [])).push(i);
+  }
+  var v0 = (SC.type === "gate") ? (S.surgeT > 0 ? 2.6 : 1.05) : 0;
+  var sg = segs();
+
+  for(i = 0; i < n; i++){
+    a = A[i];
+    if(SC.type === "gate"){
+      var ty, tx;
+      if(a.x < SC.wallX - 0.25){
+        tx = SC.wallX + 0.1;
+        ty = Math.min(Math.max(a.y, SC.gy0 + 0.22), SC.gy1 - 0.22);
+      } else {
+        tx = SC.wallX + 5;
+        ty = a.y;
+      }
+      var dx = tx - a.x, dy = ty - a.y, dl = Math.hypot(dx, dy) || 1;
+      a.fx += a.m * (v0 * dx / dl - a.vx) / PH.TAU;
+      a.fy += a.m * (v0 * dy / dl - a.vy) / PH.TAU;
+      if(S.pillar){
+        var px = a.x - SC.pillar.x, py = a.y - SC.pillar.y, pd = Math.hypot(px, py) || 1, pg = pd - a.r - SC.pillar.r;
+        var pf = Math.min(PH.A * Math.exp(-pg / PH.B), 5 * PH.A);
+        a.fx += pf * px / pd;
+        a.fy += pf * py / pd;
+        if(pg < 0){
+          var pc = Math.min(PH.KN * (-pg), FMAX);
+          a.fx += pc * px / pd;
+          a.fy += pc * py / pd;
+          a.f += pc;
+        }
+      }
+    } else {
+      a.fy += a.m * PH.G; /* the applied push dominates */
+    }
+
+    var cxi = (a.x / cell) | 0, cyi = (a.y / cell) | 0;
+    for(var ox = -1; ox <= 1; ox++){
+      for(var oy = -1; oy <= 1; oy++){
+        var lst = grid[(cxi + ox) * gh + (cyi + oy)];
+        if(!lst) continue;
+        for(var q = 0; q < lst.length; q++){
+          j = lst[q];
+          if(j <= i) continue;
+          b = A[j];
+          var ddx = a.x - b.x, ddy = a.y - b.y, d = Math.hypot(ddx, ddy);
+          if(d > 1.6 || d === 0) continue;
+          var nx = ddx / d, ny = ddy / d, gap = d - (a.r + b.r);
+          var fs = Math.min(PH.A * Math.exp(-gap / PH.B), 5 * PH.A);
+          var fnx = fs * nx, fny = fs * ny;
+          if(gap < 0){
+            var fc = Math.min(PH.KN * (-gap), FMAX);
+            fnx += fc * nx;
+            fny += fc * ny;
+            var tx2 = -ny, ty2 = nx, dvt = (b.vx - a.vx) * tx2 + (b.vy - a.vy) * ty2;
+            var ft = Math.min(PH.KT * (-gap) * dvt, FMAX);
+            fnx += ft * tx2;
+            fny += ft * ty2;
+            a.f += fc;
+            b.f += fc;
+          }
+          a.fx += fnx; a.fy += fny;
+          b.fx -= fnx; b.fy -= fny;
+        }
+      }
+    }
+
+    for(var s = 0; s < sg.length; s++){
+      var S0 = sg[s], ax = S0[0], ay = S0[1], bx = S0[2], by = S0[3];
+      var ex = bx - ax, ey = by - ay, L2 = ex * ex + ey * ey || 1;
+      var u = ((a.x - ax) * ex + (a.y - ay) * ey) / L2;
+      u = u < 0 ? 0 : u > 1 ? 1 : u;
+      var qx = ax + u * ex, qy = ay + u * ey, wx = a.x - qx, wy = a.y - qy, wd = Math.hypot(wx, wy);
+      if(wd > 1.0) continue;
+      if(wd === 0){ wd = 0.001; wx = 0.001; }
+      var wn = a.r - wd;
+      var wf = Math.min(PH.A * Math.exp(wn / PH.B), 5 * PH.A);
+      a.fx += wf * wx / wd;
+      a.fy += wf * wy / wd;
+      if(wn > 0){
+        var wc = Math.min(PH.KN * wn, FMAX);
+        a.fx += wc * wx / wd;
+        a.fy += wc * wy / wd;
+        a.f += wc;
+        if(SC.type === "gate" && ax === SC.wallX){
+          if(qy < SC.gy0) S.panels[0] += wc * dt; else S.panels[1] += wc * dt;
+        } else if(SC.type === "bench"){
+          if(ay === S.plateY && by === S.plateY) S.panels[0] += wc * dt;
+          else if(ay === SC.h && by === SC.h) S.panels[1] += wc * dt;
+        }
+      }
+    }
+  }
+
+  for(i = 0; i < n; i++){
+    a = A[i];
+    a.vx += a.fx / a.m * dt;
+    a.vy += a.fy / a.m * dt;
+    var sp = Math.hypot(a.vx, a.vy);
+    if(sp > MAXV){ a.vx *= MAXV / sp; a.vy *= MAXV / sp; }
+    var sk = Math.min(1, dt / 0.9);
+    a.sx += (a.vx - a.sx) * sk;
+    a.sy += (a.vy - a.sy) * sk;
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+    if(a.x < 0.05) a.x = 0.05;
+    if(a.y < -3) a.y = -3;
+    if(a.y > SC.h + 3) a.y = SC.h + 3;
+  }
+
+  if(SC.type === "gate"){
+    for(i = A.length - 1; i >= 0; i--){
+      if(A[i].x > SC.w - 0.4){
+        A.splice(i, 1);
+        S.escaped++;
+        S.escWin.push(S.t);
+      }
+    }
+  }
+}
+
+/* ---------- metrics ---------- */
+function measure(dtReal){
+  var bx = SC.box, A = S.agents, sum = 0, n = 0, pk = 0, i, a;
+  for(i = 0; i < A.length; i++){
+    a = A[i];
+    if(a.x >= bx.x0 && a.x <= bx.x1 && a.y >= bx.y0 && a.y <= bx.y1){
+      n++; sum += a.f;
+      if(a.f > pk) pk = a.f;
+    }
+  }
+  var area = (bx.x1 - bx.x0) * (bx.y1 - bx.y0), den = n / area;
+  var mean = n ? sum / n : 0, ratio = mean > 20 ? pk / mean : 0;
+  var k = 1 - Math.exp(-dtReal / 0.45);
+  S.m.den += (den - S.m.den) * k;
+  S.m.pk += (pk - S.m.pk) * k;
+  S.m.mean += (mean - S.m.mean) * k;
+  S.m.pr += (ratio - S.m.pr) * k;
+  while(S.escWin.length && S.escWin[0] < S.t - 10) S.escWin.shift();
+  S.m.flow = S.escWin.length * 6;
+}
+
+function lvlOf(v, t){ return v >= t[1] ? 2 : v >= t[0] ? 1 : 0; }
+
+/* ---------- audio ---------- */
+var AC = null;
+function beep(){
+  if(!S.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if(AC.state === "suspended") AC.resume();
+    for(var i = 0; i < 2; i++){
+      var o = AC.createOscillator(), g = AC.createGain(), t0 = AC.currentTime + i * 0.22;
+      o.type = "square";
+      o.frequency.setValueAtTime(880, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.14, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.17);
+      o.connect(g);
+      g.connect(AC.destination);
+      o.start(t0);
+      o.stop(t0 + 0.2);
+    }
+  } catch(e){}
+}
+
+/* ---------- log ---------- */
+function clock(){
+  var s = Math.floor(S.t);
+  return ("0" + Math.floor(s / 60) % 60).slice(-2) + ":" + ("0" + s % 60).slice(-2);
+}
+
+function pushLog(l, m){
+  S.log.unshift({t:clock(), l:l, m:m});
+  if(S.log.length > 40) S.log.pop();
+}
+
+function renderLog(){
+  var h = "";
+  for(var i = 0; i < Math.min(S.log.length, 12); i++){
+    var e = S.log[i];
+    h += '<li data-l="' + e.l + '"><span class="ts">' + e.t + '</span><span class="m">' + e.m + '</span></li>';
+  }
+  $("log").innerHTML = h;
+}
+
+/* ---------- drawing ---------- */
+var DPR = 1, VW = 0, VH = 0;
+function fit(c){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var r = c.getBoundingClientRect();
+  c.width = Math.max(1, Math.round(r.width * DPR));
+  c.height = Math.max(1, Math.round(r.height * DPR));
+  return r;
+}
+
+function draw(){
+  var r = view.getBoundingClientRect();
+  VW = r.width; VH = r.height;
+  if(!(VW > 40 && VH > 40)) return;
+  if(view.width !== Math.round(VW * DPR) || view.height !== Math.round(VH * DPR)) fit(view);
+  var g = vx;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.fillStyle = S.photo ? "#05070A" : "#080B0D";
+  g.fillRect(0, 0, VW, VH);
+
+  var pad = 14, sc = Math.max(0.5, Math.min((VW - pad * 2) / SC.w, (VH - pad * 2) / SC.h));
+  var ox = (VW - SC.w * sc) / 2, oy = (VH - SC.h * sc) / 2;
+  function X(x){ return ox + x * sc; }
+  function Y(y){ return oy + y * sc; }
+
+  if(!S.photo){
+    g.strokeStyle = "#111a20";
+    g.lineWidth = 1;
+    g.beginPath();
+    for(var gx = 0; gx <= SC.w; gx++){ g.moveTo(X(gx), Y(0)); g.lineTo(X(gx), Y(SC.h)); }
+    for(var gy = 0; gy <= SC.h; gy++){ g.moveTo(X(0), Y(gy)); g.lineTo(X(SC.w), Y(gy)); }
+    g.stroke();
+  }
+
+  /* arena floor */
+  g.fillStyle = S.photo ? "#04070B" : "#0B1116";
+  g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
+  g.strokeStyle = "#1E2A33";
+  g.lineWidth = 1;
+  g.strokeRect(X(0), Y(0), SC.w * sc, SC.h * sc);
+
+  /* measurement zone */
+  if(!S.photo){
+    g.setLineDash([5, 4]);
+    g.strokeStyle = "#2E4654";
+    g.lineWidth = 1;
+    g.strokeRect(X(SC.box.x0), Y(SC.box.y0), (SC.box.x1 - SC.box.x0) * sc, (SC.box.y1 - SC.box.y0) * sc);
+    g.setLineDash([]);
+    g.fillStyle = "#4B6472";
+    g.font = "600 10px 'IBM Plex Mono',monospace";
+    g.fillText("MEASUREMENT ZONE", X(SC.box.x0), Y(SC.box.y0) - 6);
+  }
+
+  /* walls + hardware */
+  var pmax = 4000;
+  if(SC.type === "gate"){
+    g.lineCap = "butt";
+    g.strokeStyle = "#55646F";
+    g.lineWidth = Math.max(4, 0.16 * sc);
+    g.beginPath();
+    g.moveTo(X(SC.wallX), Y(0)); g.lineTo(X(SC.wallX), Y(SC.gy0));
+    g.moveTo(X(SC.wallX), Y(SC.gy1)); g.lineTo(X(SC.wallX), Y(SC.h));
+    g.stroke();
+
+    /* sensing panels on the crowd-facing side */
+    var pl = [[SC.gy0 - 2.2, SC.gy0, S.panels[0]], [SC.gy1, SC.gy1 + 2.2, S.panels[1]]];
+    for(var p = 0; p < 2; p++){
+      var u = Math.min(pl[p][2] / pmax, 1);
+      g.fillStyle = u > 0.62 ? "#D4513A" : u > 0.25 ? "#D9A33C" : "#3E9E6B";
+      g.globalAlpha = 0.25 + 0.75 * u;
+      g.fillRect(X(SC.wallX) - Math.max(5, 0.12 * sc) - 2, Y(pl[p][0]), Math.max(5, 0.12 * sc), (pl[p][1] - pl[p][0]) * sc);
+      g.globalAlpha = 1;
+    }
+    if(S.pillar){
+      g.fillStyle = "#3C4A54";
+      g.strokeStyle = "#6C7D88";
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(X(SC.pillar.x), Y(SC.pillar.y), Math.max(0.5, SC.pillar.r * sc), 0, 6.2832);
+      g.fill();
+      g.stroke();
+    }
+    g.fillStyle = "#3E9E6B";
+    g.font = "600 11px 'IBM Plex Mono',monospace";
+    g.fillText("EXIT →", X(SC.wallX) + 8, Y(SC.h / 2) + 4);
+  } else {
+    g.strokeStyle = "#55646F";
+    g.lineWidth = Math.max(4, 0.12 * sc);
+    g.beginPath();
+    g.moveTo(X(0), Y(0)); g.lineTo(X(0), Y(SC.h));
+    g.lineTo(X(SC.w), Y(SC.h)); g.lineTo(X(SC.w), Y(0));
+    g.stroke();
+
+    g.fillStyle = "#8C8678";
+    g.fillRect(X(0.1), Y(S.plateY) - Math.max(6, 0.14 * sc), (SC.w - 0.2) * sc, Math.max(6, 0.14 * sc));
+    g.fillStyle = "#6E747D";
+    g.font = "600 10px 'IBM Plex Mono',monospace";
+    g.fillText("PRESS PLATE", X(0.25), Y(S.plateY) - Math.max(10, 0.18 * sc));
+
+    var uu = Math.min(S.panels[1] / 30000, 1);
+    g.fillStyle = uu > 0.62 ? "#D4513A" : uu > 0.25 ? "#D9A33C" : "#3E9E6B";
+    g.globalAlpha = 0.3 + 0.7 * uu;
+    g.fillRect(X(0), Y(SC.h) + 3, SC.w * sc, Math.max(5, 0.1 * sc));
+    g.globalAlpha = 1;
+    g.fillStyle = "#6E747D";
+    g.fillText("LOAD CELL", X(0.25), Y(SC.h) + Math.max(18, 0.1 * sc + 16));
+  }
+
+  /* agents */
+  var A = S.agents, FS = 400;
+  for(var i = 0; i < A.length; i++){
+    var a = A[i], rr = Math.max(0.5, a.r * sc);
+    if(S.photo){ g.fillStyle = isoCol(a.f / FS); }
+    else { g.fillStyle = forceCol(a.f / 1500); }
+    g.beginPath();
+    g.arc(X(a.x), Y(a.y), rr, 0, 6.2832);
+    g.fill();
+    if(!S.photo){
+      g.strokeStyle = "rgba(10,14,18,.85)";
+      g.lineWidth = 1;
+      g.stroke();
+    } else if(rr > 5){
+      g.strokeStyle = "rgba(0,0,0,.55)";
+      g.lineWidth = 1;
+      g.stroke();
+    }
+  }
+
+  if(S.surgeT > 0){
+    g.fillStyle = "rgba(212,81,58,.1)";
+    g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
+    g.fillStyle = "#D4513A";
+    g.font = "700 13px 'Barlow Condensed',sans-serif";
+    g.fillText("SURGE FROM THE BACK", X(0.35), Y(0) + 20);
+  }
+}
+
+/* ---------- chart ---------- */
+var hoverX = null;
+function drawChart(){
+  var r = chart.getBoundingClientRect(), w = r.width, h = r.height;
+  if(!(w > 60 && h > 40)) return;
+  if(chart.width !== Math.round(w * DPR) || chart.height !== Math.round(h * DPR)){
+    chart.width = Math.round(w * DPR);
+    chart.height = Math.round(h * DPR);
+  }
+  var g = cx;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.clearRect(0, 0, w, h);
+  var L = 34, R = 6, T = 8, B = 16, pw = w - L - R, ph = h - T - B;
+  var ymax = 3000;
+  for(var i = 0; i < S.hist.length; i++){
+    if(S.hist[i].p > ymax) ymax = S.hist[i].p;
+  }
+  ymax = Math.ceil(ymax / 1000) * 1000;
+  function Y(v){ return T + ph - (v / ymax) * ph; }
+  function X(i){ return L + (i / 399) * pw; }
+
+  g.strokeStyle = "#1D2932";
+  g.lineWidth = 1;
+  g.fillStyle = "#5A6B76";
+  g.font = "10px 'IBM Plex Mono',monospace";
+  for(var t = 0; t <= ymax; t += ymax / 3){
+    g.beginPath();
+    g.moveTo(L, Y(t));
+    g.lineTo(w - R, Y(t));
+    g.stroke();
+    g.fillText(Math.round(t / 1000 * 10) / 10 + "k", 2, Y(t) + 3);
+  }
+
+  g.setLineDash([4, 3]);
+  g.strokeStyle = "#D4513A";
+  g.beginPath();
+  g.moveTo(L, Y(2550));
+  g.lineTo(w - R, Y(2550));
+  g.stroke();
+  g.setLineDash([]);
+
+  if(S.hist.length > 1){
+    var off = 400 - S.hist.length;
+    g.beginPath();
+    g.moveTo(X(off), Y(0));
+    for(var k = 0; k < S.hist.length; k++){
+      g.lineTo(X(off + k), Y(Math.min(S.hist[k].p, ymax)));
+    }
+    g.lineTo(X(399), Y(0));
+    g.closePath();
+    var grd = g.createLinearGradient(0, T, 0, T + ph);
+    grd.addColorStop(0, "rgba(79,179,217,.26)");
+    grd.addColorStop(1, "rgba(79,179,217,.02)");
+    g.fillStyle = grd;
+    g.fill();
+
+    g.beginPath();
+    for(var k2 = 0; k2 < S.hist.length; k2++){
+      var px = X(off + k2), py = Y(Math.min(S.hist[k2].p, ymax));
+      k2 ? g.lineTo(px, py) : g.moveTo(px, py);
+    }
+    g.strokeStyle = "#4FB3D9";
+    g.lineWidth = 2;
+    g.lineJoin = "round";
+    g.stroke();
+
+    var lastPoint = S.hist[S.hist.length - 1];
+    g.fillStyle = "#4FB3D9";
+    g.beginPath();
+    g.arc(X(399), Y(Math.min(lastPoint.p, ymax)), 4, 0, 6.2832);
+    g.fill();
+    g.strokeStyle = "#141B21";
+    g.lineWidth = 2;
+    g.stroke();
+
+    if(hoverX !== null){
+      var idx = Math.round((hoverX - L) / pw * 399);
+      var hi = idx - off;
+      if(hi >= 0 && hi < S.hist.length){
+        var hx = X(idx), hy = Y(Math.min(S.hist[hi].p, ymax));
+        g.strokeStyle = "#3A4A56";
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(hx, T);
+        g.lineTo(hx, T + ph);
+        g.stroke();
+        g.fillStyle = "#E8EFF4";
+        g.beginPath();
+        g.arc(hx, hy, 3.5, 0, 6.2832);
+        g.fill();
+        $("chartNote").textContent = (S.hist[hi].t).toFixed(0) + " s — peak " + Math.round(S.hist[hi].p) + " N · average " + Math.round(S.hist[hi].m) + " N · ratio " + (S.hist[hi].m > 5 ? (S.hist[hi].p / S.hist[hi].m).toFixed(1) : "–") + "×";
+      }
+    }
+  }
+}
+
+chart.addEventListener("mousemove", function(e){ hoverX = e.offsetX; });
+chart.addEventListener("mouseleave", function(){
+  hoverX = null;
+  $("chartNote").textContent = "Dashed line: 2550 N, the force at which ribs fracture.";
+});
+
+/* ---------- UI ---------- */
+var ADV = [
+  ["Safe", "Flow is free. Normal entry."],
+  ["Caution", "Compression building. Hold entry and widen the gate."],
+  ["Danger", "Stop entry now. Do not push the queue forward."]
+];
+var ADVB = [
+  ["Light", "Barely loaded. No chains have formed yet."],
+  ["Loaded", "Chains forming. A few discs carry most of the push."],
+  ["Crushing", "One disc is past the rib-fracture force. This is the crowd-crush regime."]
+];
+
+function ui(){
+  var ld = lvlOf(S.m.den, TH.den), lp = lvlOf(S.m.pk, TH.pk), lr = S.m.pk > 200 ? lvlOf(S.m.pr, TH.pr) : 0;
+  var L = Math.max(ld, lp, lr);
+  $("tDen").setAttribute("data-l", ld); $("vDen").textContent = S.m.den.toFixed(1);
+  $("tPk").setAttribute("data-l", lp);  $("vPk").textContent = Math.round(S.m.pk);
+  $("tPr").setAttribute("data-l", lr);  $("vPr").textContent = S.m.pr.toFixed(1);
+  $("vFl").textContent = SC.type === "gate" ? Math.round(S.m.flow) : Math.round(S.m.mean);
+  var al = $("alarm");
+  if(L !== S.lvl){
+    var AD = SC.type === "gate" ? ADV : ADVB;
+    al.setAttribute("data-l", L);
+    $("alarmState").textContent = AD[L][0];
+    $("alarmAdv").textContent = AD[L][1];
+    var why = [];
+    if(ld === L && L) why.push("density " + S.m.den.toFixed(1) + "/m²");
+    if(lp === L && L) why.push("peak " + Math.round(S.m.pk) + " N");
+    if(lr === L && L) why.push("one person taking " + S.m.pr.toFixed(1) + "× the average");
+    pushLog(L, (L === 2 ? "DANGER — " : L === 1 ? "CAUTION — " : "Cleared — ") + (why.length ? why.join(", ") : "all metrics normal"));
+    if(L === 2){
+      beep();
+      if(S.autoStop && S.inflow > 0){
+        S.inflow = 0;
+        $("inflow").value = 0;
+        $("inflowO").textContent = "0.0/s";
+        pushLog(2, "AUTO-STOP: entry closed by the system.");
+      }
+    }
+    renderLog();
+    S.lvl = L;
+  }
+
+  if(SC.type === "gate") S.panels[2] = S.panels[0] + S.panels[1];
+  var pm = SC.type === "gate" ? [4000, 4000, 8000] : [30000, 30000, 1];
+  for(var p = 0; p < 3; p++){
+    var u = Math.min(S.panels[p] / pm[p], 1);
+    $("p" + (p + 1) + "f").style.width = (u * 100).toFixed(1) + "%";
+    $("p" + (p + 1) + "f").style.background = u > 0.62 ? "var(--crit)" : u > 0.25 ? "var(--warn)" : "var(--good)";
+    $("p" + (p + 1) + "v").textContent = (S.panels[p] / 1000).toFixed(2) + " kN";
+  }
+}
+
+/* ---------- loop ---------- */
+var last = 0;
+function frame(ts){
+  var dt = Math.min((ts - last) / 1000 || 0.016, 1 / 25);
+  last = ts;
+  if(S.surgeT > 0) S.surgeT -= dt;
+  S.panels = [0, 0, 0];
+  var sub = dt / SUB;
+  for(var i = 0; i < SUB; i++){
+    if(SC.type === "gate"){
+      S.spawnAcc += S.inflow * sub;
+      while(S.spawnAcc >= 1 && S.agents.length < 240){
+        S.spawnAcc -= 1;
+        S.agents.push(mkAgent(0.35 + Math.random() * 0.5, 0.5 + Math.random() * (SC.h - 1.0)));
+      }
+      if(S.spawnAcc > 1) S.spawnAcc = 1;
+    }
+    step(sub);
+    S.t += sub;
+  }
+  for(var p = 0; p < 3; p++) S.panels[p] /= dt;
+  measure(dt);
+  S.histAcc += dt;
+  if(S.histAcc > 0.1){
+    S.histAcc = 0;
+    S.hist.push({t:S.t, p:S.m.pk, m:S.m.mean});
+    if(S.hist.length > 400) S.hist.shift();
+  }
+  draw();
+  drawChart();
+  ui();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- controls ---------- */
+function mode(){
+  var gate = S.scene === "gate";
+  $("inflow").parentNode.style.display = gate ? "" : "none";
+  $("gate").parentNode.style.display = gate ? "" : "none";
+  $("press").parentNode.style.display = gate ? "none" : "";
+  $("pillar").style.display = gate ? "" : "none";
+  $("surge").style.display = gate ? "" : "none";
+  $("stop").style.display = gate ? "" : "none";
+  $("auto").style.display = gate ? "" : "none";
+  $("hwTitle").textContent = gate ? "Barrier sensing panels" : "Bench hardware";
+  $("p1n").textContent = gate ? "P1 above gate" : "Press plate";
+  $("p2n").textContent = gate ? "P2 below gate" : "Floor reaction";
+  $("p3n").textContent = "P1 + P2 total";
+  $("row3").hidden = !gate;
+  $("kFl").textContent = gate ? "Through gate" : "Average force";
+  $("uFl").textContent = gate ? "/min" : "N";
+  $("lFl").textContent = gate ? "people leaving" : "mean over all discs";
+  $("modeNote").textContent = S.photo ? "Camera view: colours are photoelastic fringe orders" : "Plan view: brightness is force carried";
+  $("rampBar").style.background = S.photo
+    ? "linear-gradient(90deg," + isoCol(0) + "," + isoCol(0.6) + "," + isoCol(1.0) + "," + isoCol(1.5) + "," + isoCol(2.1) + "," + isoCol(2.7) + ")"
+    : "linear-gradient(90deg," + forceCol(0) + "," + forceCol(.35) + "," + forceCol(.7) + "," + forceCol(1) + ")";
+}
+
+$("inflow").oninput = function(){
+  S.inflow = +this.value;
+  $("inflowO").textContent = (+this.value).toFixed(1) + "/s";
+};
+$("gate").oninput = function(){
+  S.gateW = +this.value;
+  $("gateO").textContent = (+this.value).toFixed(1) + " m";
+  SC.gy0 = (SC.h - S.gateW) / 2;
+  SC.gy1 = (SC.h + S.gateW) / 2;
+};
+$("press").oninput = function(){
+  S.press = +this.value;
+  $("pressO").textContent = this.value + " %";
+  S.plateY = S.pileTop - 0.04 + (S.press / 100) * 0.50;
+};
+$("pillar").onclick = function(){
+  S.pillar = !S.pillar;
+  this.setAttribute("aria-pressed", S.pillar);
+  pushLog(0, S.pillar ? "Pillar placed 1.0 m before the gate." : "Pillar removed.");
+  renderLog();
+};
+$("viewBtn").onclick = function(){
+  S.photo = !S.photo;
+  this.setAttribute("aria-pressed", S.photo);
+  this.textContent = S.photo ? "Plan view" : "Camera view";
+  mode();
+};
+$("surge").onclick = function(){
+  S.surgeT = 4;
+  beep();
+  pushLog(2, "Surge: people at the back pushed forward.");
+  renderLog();
+};
+$("stop").onclick = function(){
+  S.inflow = 0;
+  $("inflow").value = 0;
+  $("inflowO").textContent = "0.0/s";
+  pushLog(2, "MARSHAL: entry stopped by hand.");
+  renderLog();
+};
+$("auto").onclick = function(){
+  S.autoStop = !S.autoStop;
+  this.setAttribute("aria-pressed", S.autoStop);
+};
+$("sound").onclick = function(){
+  S.sound = !S.sound;
+  this.setAttribute("aria-pressed", S.sound);
+  if(S.sound) beep();
+};
+$("reset").onclick = function(){ reset(); };
+
+function tab(which){
+  S.scene = which;
+  $("tabGate").setAttribute("aria-selected", which === "gate");
+  $("tabBench").setAttribute("aria-selected", which === "bench");
+  reset();
+  mode();
+}
+$("tabGate").onclick = function(){ tab("gate"); };
+$("tabBench").onclick = function(){ tab("bench"); };
+
+fit(view);
+reset();
+mode();
+requestAnimationFrame(function(t){
+  last = t;
+  requestAnimationFrame(frame);
+});
+window.addEventListener("resize", function(){ fit(view); });
+})();
+</script>
+</body>
+</html>
+"""
+    return html_template.replace("__INITIAL_PARTICLES__", str(initial_particles))
