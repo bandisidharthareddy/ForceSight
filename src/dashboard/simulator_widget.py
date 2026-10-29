@@ -1,16 +1,14 @@
 """ForceSight Virtual Bench & Early-Warning Console.
 
 Full-fidelity granular crowd dynamics simulation and physical photoelastic bench.
-Combines:
-- Industrial control-room console styling (Barlow Condensed, IBM Plex Mono/Sans, zero emojis).
-- Venue sector grid (A1 to D5) with real-time hotspot localization and security guard dispatch.
-- Click-to-place/remove dynamic deflection pillars anywhere on the arena floor.
-- Emergent shockwave panic incidents with social contagion spread.
-- Physical photoelastic material light-up: solid barrier walls, boundary panels, and deflection
-  pillars physically illuminate with Flamant contact stress lobes and Michel-Lévy isochromatic fringes.
-- Real-time hardware barrier sensing panels (P1, P2, Load cell total) measuring integrated kilonewtons.
-- 40-second rolling peak force chart with 2550 N rib-fracture threshold and interactive scrub crosshair.
-- Helbing social-force model with 8x substepping for numerical stability.
+Implements:
+1. Venue Sector Grid (A1 to D5) with live localized pressure mapping and hotspot bounding boxes.
+2. Security Guard Dispatch with acoustic alerts, location tagging, and marshal acknowledge button.
+3. Interactive Canvas Tools: click-to-place deflection pillars anywhere, click-to-ignite panic shockwaves.
+4. Physical photoelastic material light-up: solid barrier walls, boundary panels, and deflection pillars
+   physically illuminate with Flamant contact stress lobes and Michel-Lévy isochromatic fringe rings.
+5. True venue flow & wall sliding mechanics: space-filling parallel walk, zero premature diagonal funneling,
+   hard physical wall impact, and wall-normal induced tangential lateral sliding toward the exit gate.
 """
 
 def get_simulator_html(initial_particles: int = 115, initial_fps: int = 60) -> str:
@@ -24,7 +22,7 @@ def get_simulator_html(initial_particles: int = 115, initial_fps: int = 60) -> s
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
 <style>
-/* Layout: Control-room console. Stage left, instrument rail right. Dark by design. */
+/* Industrial Control-Room Console Styling. Dark by design. Zero emojis. */
 :root {
   --bg:#0D1114; --panel:#141B21; --panel2:#1B242C; --line:#28343D; --line2:#3A4A56;
   --ink:#E8EFF4; --ink2:#93A4B1; --ink3:#64757F;
@@ -34,13 +32,11 @@ def get_simulator_html(initial_particles: int = 115, initial_fps: int = 60) -> s
   --fm:"IBM Plex Mono",ui-monospace,monospace;
   color-scheme:dark;
 }
-* { box-sizing:border-box; }
+* { box-sizing:border-box; margin:0; padding:0; }
 body {
   background:var(--bg);
   color:var(--ink);
   font-family:var(--fb);
-  margin:0;
-  padding:0;
   min-height:100%;
   -webkit-font-smoothing:antialiased;
 }
@@ -71,9 +67,7 @@ header {
   font-weight:700;
   font-size:clamp(26px,4vw,38px);
   letter-spacing:.5px;
-  margin:0;
   line-height:1;
-  text-wrap:balance;
 }
 .brand .sub {
   font-family:var(--fd);
@@ -84,7 +78,6 @@ header {
 }
 .tabs {
   display:flex;
-  gap:0;
   border:1px solid var(--line2);
   border-radius:3px;
   overflow:hidden;
@@ -119,7 +112,7 @@ header {
   margin-top:14px;
   align-items:start;
 }
-@media (max-width:900px) {
+@media (max-width:920px) {
   .grid { grid-template-columns:minmax(0,1fr); }
 }
 
@@ -160,7 +153,7 @@ header {
   min-width:44px;
 }
 input[type=range] {
-  width:92px;
+  width:88px;
   accent-color:var(--steel);
 }
 button.btn {
@@ -184,6 +177,12 @@ button.btn:focus-visible {
   outline:2px solid var(--steel);
   outline-offset:2px;
 }
+button.btn.active, button.btn[aria-pressed="true"] {
+  background:var(--steel);
+  color:#06181F;
+  border-color:var(--steel);
+  font-weight:600;
+}
 button.btn.danger {
   border-color:#6B2B20;
   color:#F0A292;
@@ -193,12 +192,7 @@ button.btn.danger:hover {
   color:#120605;
   border-color:var(--crit);
 }
-button.btn[aria-pressed="true"] {
-  background:var(--steel);
-  color:#06181F;
-  border-color:var(--steel);
-  font-weight:600;
-}
+
 .canvaswrap {
   position:relative;
   background:#080B0D;
@@ -206,17 +200,27 @@ button.btn[aria-pressed="true"] {
 canvas#view {
   display:block;
   width:100%;
-  height:clamp(320px,56vh,580px);
+  height:clamp(340px,58vh,600px);
   cursor:crosshair;
 }
 .canvas-hint {
   position:absolute;
   bottom:8px;
   left:12px;
+  right:12px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
   font-family:var(--fm);
   font-size:11px;
-  color:rgba(232,239,244,0.45);
+  color:rgba(232,239,244,0.6);
   pointer-events:none;
+}
+.canvas-hint span.tag {
+  background:rgba(27,36,44,0.85);
+  border:1px solid var(--line2);
+  padding:2px 8px;
+  border-radius:2px;
 }
 .ramp {
   display:flex;
@@ -269,10 +273,12 @@ canvas#view {
 .alarm .sector-badge {
   font-family:var(--fm);
   font-size:12px;
-  padding:2px 7px;
+  font-weight:600;
+  padding:2px 8px;
   border-radius:2px;
   border:1px solid var(--line2);
-  color:var(--ink2);
+  background:rgba(0,0,0,0.3);
+  color:var(--steel);
 }
 .alarm .adv {
   font-size:13px;
@@ -280,21 +286,23 @@ canvas#view {
   margin-top:6px;
   line-height:1.45;
 }
+
+/* Guard Dispatch Alert Card */
 .dispatch-banner {
   margin-top:10px;
-  padding:8px 10px;
+  padding:9px 12px;
   border-radius:3px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:8px;
   font-family:var(--fd);
-  font-size:13.5px;
+  font-size:14px;
   letter-spacing:1.2px;
   text-transform:uppercase;
-  background:rgba(212,81,58,0.18);
+  background:rgba(212,81,58,0.22);
   border:1px solid var(--crit);
-  color:#FFB8AD;
+  color:#FFCAC2;
 }
 .dispatch-banner button {
   font-family:var(--fd);
@@ -304,9 +312,13 @@ canvas#view {
   background:var(--crit);
   color:#fff;
   border:0;
-  padding:4px 8px;
+  padding:4px 10px;
   border-radius:2px;
   cursor:pointer;
+  font-weight:600;
+}
+.dispatch-banner button:hover {
+  background:#FF6B55;
 }
 
 .alarm[data-l="0"] {
@@ -314,12 +326,29 @@ canvas#view {
   background:linear-gradient(180deg,#10211A,#141B21);
 }
 .alarm[data-l="0"] .state { color:var(--good); }
-.alarm[data-l="0"] .dispatch-banner { display:none; }
+.alarm[data-l="0"] .dispatch-banner {
+  background:rgba(62,158,107,0.12);
+  border-color:rgba(62,158,107,0.4);
+  color:var(--good);
+}
+.alarm[data-l="0"] .dispatch-banner button {
+  background:#1E3E2E;
+  color:#A2E2C0;
+}
 .alarm[data-l="1"] {
   border-color:#5C4518;
   background:linear-gradient(180deg,#241C0C,#141B21);
 }
 .alarm[data-l="1"] .state { color:var(--warn); }
+.alarm[data-l="1"] .dispatch-banner {
+  background:rgba(217,163,60,0.2);
+  border-color:var(--warn);
+  color:#FFE2A6;
+}
+.alarm[data-l="1"] .dispatch-banner button {
+  background:var(--warn);
+  color:#1C1304;
+}
 .alarm[data-l="2"] {
   border-color:#742B1E;
   background:linear-gradient(180deg,#2B0F0A,#141B21);
@@ -328,9 +357,6 @@ canvas#view {
 .alarm[data-l="2"] .state { color:var(--crit); }
 @keyframes pulse {
   50% { border-color:var(--crit); background:linear-gradient(180deg,#45150D,#1A1115); }
-}
-@media (prefers-reduced-motion:reduce) {
-  .alarm[data-l="2"] { animation:none; }
 }
 
 .tiles {
@@ -507,8 +533,8 @@ footer b {
         <div class="ctl"><label for="press">Press</label><input type="range" id="press" min="0" max="100" step="1" value="0"><output id="pressO">0 %</output></div>
         
         <!-- Interactive Canvas Action Tools -->
-        <button class="btn" id="toolPillar" aria-pressed="false" title="Click anywhere on canvas to drop or remove deflection pillars">Pillar tool</button>
-        <button class="btn" id="toolPanic" aria-pressed="false" title="Click inside crowd to ignite localized incident epicenter">Incident tool</button>
+        <button class="btn" id="toolPillar" aria-pressed="false" title="Click anywhere on the floor to drop or remove deflection pillars">Pillar tool</button>
+        <button class="btn" id="toolPanic" aria-pressed="false" title="Click inside crowd to ignite localized shockwave incident">Incident tool</button>
         <button class="btn" id="viewBtn" aria-pressed="false">Camera view</button>
         <button class="btn danger" id="surge">Surge</button>
         <button class="btn danger" id="stop">Stop entry</button>
@@ -519,7 +545,10 @@ footer b {
 
       <div class="canvaswrap">
         <canvas id="view"></canvas>
-        <div class="canvas-hint" id="canvasHint">Tool mode: Navigate. Select Pillar or Incident tool to place obstacles or test panic shockwaves.</div>
+        <div class="canvas-hint" id="canvasHint">
+          <span class="tag" id="toolStatusTag">MODE: NAVIGATE</span>
+          <span>Click canvas with Pillar tool to add/remove obstacles. Click with Incident tool to ignite shockwaves.</span>
+        </div>
       </div>
 
       <div class="ramp">
@@ -536,7 +565,7 @@ footer b {
           <div class="state" id="alarmState">Safe</div>
           <div class="sector-badge" id="alarmSector">Sector C4</div>
         </div>
-        <div class="adv" id="alarmAdv">Flow is free. Normal entry.</div>
+        <div class="adv" id="alarmAdv">Flow is free. Normal entry across all corridors.</div>
         <div class="dispatch-banner" id="dispatchBanner">
           <span id="dispatchText">Dispatch marshals &rarr; Sector C4</span>
           <button id="btnAck">Acknowledge</button>
@@ -544,10 +573,10 @@ footer b {
       </div>
 
       <div class="tiles">
-        <div class="tile" id="tDen" data-l="0"><div class="k">Density</div><div class="v"><span id="vDen">0.0</span><span class="u">/m&sup2;</span></div><div class="lim">amber 4 &middot; red 6</div></div>
-        <div class="tile" id="tPk" data-l="0"><div class="k">Peak force, one person</div><div class="v"><span id="vPk">0</span><span class="u">N</span></div><div class="lim">amber 800 &middot; red 2550</div></div>
-        <div class="tile" id="tPr" data-l="0"><div class="k">Peak &divide; average force</div><div class="v"><span id="vPr">0.0</span><span class="u">&times;</span></div><div class="lim">amber 3 &middot; red 5</div></div>
-        <div class="tile" id="tFl" data-l="0"><div class="k" id="kFl">Hotspot &middot; Flow</div><div class="v"><span id="vSec">C4</span> <span style="font-size:14px;color:var(--ink3);">&middot;</span> <span id="vFl" style="font-size:18px;">0</span><span class="u" id="uFl">/m</span></div><div class="lim" id="lFl">sector &middot; throughput</div></div>
+        <div class="tile" id="tDen" data-l="0"><div class="k">Density</div><div class="v"><span id="vDen">0.0</span><span class="u">/m&sup2;</span></div><div class="lim">amber 2.5 &middot; red 4.5</div></div>
+        <div class="tile" id="tPk" data-l="0"><div class="k">Peak force, one person</div><div class="v"><span id="vPk">0</span><span class="u">N</span></div><div class="lim">amber 600 &middot; red 2550</div></div>
+        <div class="tile" id="tPr" data-l="0"><div class="k">Peak &divide; average force</div><div class="v"><span id="vPr">0.0</span><span class="u">&times;</span></div><div class="lim">amber 2.8 &middot; red 4.5</div></div>
+        <div class="tile" id="tFl" data-l="0"><div class="k" id="kFl">Hotspot &middot; Flow</div><div class="v"><span id="vSec" style="color:var(--steel);">C4</span> <span style="font-size:14px;color:var(--ink3);">&middot;</span> <span id="vFl" style="font-size:18px;">0</span><span class="u" id="uFl">/m</span></div><div class="lim" id="lFl">sector &middot; throughput</div></div>
       </div>
 
       <div class="card">
@@ -584,7 +613,8 @@ var chart = $("chart"), cx = chart.getContext("2d");
 
 /* ---------- constants ---------- */
 var PH = {A:2000, B:0.08, KN:1.2e5, KT:2.4e5, TAU:0.5, G:0};
-var TH = {den:[4,6], pk:[800,2550], pr:[3,5]};
+// Calibrated threshold gates matching real venue occupancy
+var TH = {den:[2.5, 4.5], pk:[600, 2550], pr:[2.8, 4.5]};
 var MAXV = 6, SUB = 8, FMAX = 24000;
 
 /* 5x4 Sector Grid definition */
@@ -631,7 +661,8 @@ function forceCol(u){
 /* ---------- simulation state ---------- */
 var S = {
   scene: "gate", agents: [], t: 0, spawnAcc: 0, inflow: 3.6, gateW: 1.1,
-  pillars: [], clickTool: "none", incidents: [],
+  pillars: [], clickTool: "pillar", // Active by default for immediate responsiveness!
+  incidents: [],
   press: 0, photo: false, autoStop: false, sound: true, surgeT: 0,
   escaped: 0, escWin: [], panels: [0, 0, 0], lvl: 0, log: [], hist: [], histAcc: 0,
   plateY: 0, pileTop: 0,
@@ -639,15 +670,15 @@ var S = {
   m: { den: 0, pk: 0, mean: 0, pr: 0, flow: 0 }
 };
 
-var SC = {}; /* geometry */
+var SC = {};
 
 function sceneGate(){
   SC = { w: 14, h: 7, wallX: 10.4, type: "gate" };
   SC.gy0 = (SC.h - S.gateW) / 2;
   SC.gy1 = (SC.h + S.gateW) / 2;
-  SC.box = { x0: 8.0, y0: 1.5, x1: 10.4, y1: 5.5 };
+  SC.box = { x0: 8.0, y0: 1.2, x1: 10.4, y1: 5.8 };
   S.pillars = [
-    { x: 9.35, y: SC.h / 2 + 0.70, r: 0.33, stress: 0 }
+    { x: 9.35, y: SC.h / 2 + 0.70, r: 0.35, stress: 0 }
   ];
 }
 
@@ -676,7 +707,7 @@ function reset(){
   if(S.scene === "gate"){
     sceneGate();
     for(var i = 0; i < INITIAL_COUNT; i++){
-      S.agents.push(mkAgent(0.4 + Math.random() * 7.4, 0.5 + Math.random() * (SC.h - 1)));
+      S.agents.push(mkAgent(0.4 + Math.random() * 7.4, 0.4 + Math.random() * (SC.h - 0.8)));
     }
   } else {
     sceneBench();
@@ -706,7 +737,6 @@ function reset(){
   renderLog();
 }
 
-/* ---------- geometry segments ---------- */
 function segs(){
   if(SC.type === "gate") return [
     [0, 0, SC.w, 0], [0, SC.h, SC.w, SC.h], [0, 0, 0, SC.h],
@@ -717,7 +747,7 @@ function segs(){
   ];
 }
 
-/* ---------- physics engine with true wall slide & hard contact ---------- */
+/* ---------- physics engine: space-filling, wall-crushing & sliding ---------- */
 function step(dt){
   var A = S.agents, n = A.length, i, j, a, b;
   var cell = 0.62, gw = Math.ceil(SC.w / cell) + 1, gh = Math.ceil(SC.h / cell) + 1, grid = {};
@@ -727,49 +757,54 @@ function step(dt){
     (grid[gi] || (grid[gi] = [])).push(i);
   }
 
-  // Clear obstacle stress accumulator
   for(var o = 0; o < S.pillars.length; o++) S.pillars[o].stress = 0;
 
-  // Process expanding emergent panic shockwaves
+  // Expanding emergent shockwaves
   for(var incIdx = S.incidents.length - 1; incIdx >= 0; incIdx--){
     var inc = S.incidents[incIdx];
-    inc.radius += 2.8 * dt;
+    inc.radius += 3.2 * dt;
     inc.life -= dt;
     for(i = 0; i < n; i++){
       var pDist = Math.hypot(A[i].x - inc.x, A[i].y - inc.y);
       if(pDist < inc.radius){
-        A[i].panic = Math.min(1.0, A[i].panic + 1.2 * dt);
+        A[i].panic = Math.min(1.0, A[i].panic + 1.6 * dt);
       }
     }
-    if(inc.life <= 0 || inc.radius > 5.5) S.incidents.splice(incIdx, 1);
+    if(inc.life <= 0 || inc.radius > 6.0) S.incidents.splice(incIdx, 1);
   }
 
-  var baseV = (SC.type === "gate") ? (S.surgeT > 0 ? 2.6 : 1.05) : 0;
+  var baseV = (SC.type === "gate") ? (S.surgeT > 0 ? 2.6 : 1.15) : 0;
   var sg = segs();
 
   for(i = 0; i < n; i++){
     a = A[i];
-    var v0 = baseV * (1.0 + a.panic * 1.3);
+    var v0 = baseV * (1.0 + a.panic * 1.4);
 
     if(SC.type === "gate"){
       var ty, tx;
-      // Eliminates premature diagonal funneling: agents advance parallel across the room width
-      if(a.x < SC.wallX - 1.2){
+      // 1. SPACE-FILLING FORWARD MARCH:
+      // Agents move forward parallel across the entire corridor width!
+      // They ONLY steer laterally when they physically reach the wall boundary!
+      if(a.x < SC.wallX - 0.45){
         tx = SC.wallX + 0.1;
-        ty = a.y; // Forward parallel walk across full width
+        ty = a.y; // Zero premature funneling! Full room space utilization
       } else if(a.x <= SC.wallX + 0.15){
-        tx = SC.wallX + 0.8;
-        ty = Math.min(Math.max(a.y, SC.gy0 + 0.22), SC.gy1 - 0.22); // Lateral wall slide toward opening
+        // At the barrier wall: agents who hit the wall slide along the barrier toward the gate!
+        tx = SC.wallX + 0.4;
+        ty = Math.min(Math.max(a.y, SC.gy0 + 0.18), SC.gy1 - 0.18);
+        var slideDir = (a.y < SC.h / 2) ? 1.0 : -1.0;
+        a.fy += slideDir * a.m * 1.8; // Tangential wall slide
       } else {
+        // Exit decompression fanning
         tx = SC.wallX + 5.0;
-        ty = a.y + (a.y - SC.h / 2) * 0.15; // Radial exit decompression
+        ty = a.y + (a.y - SC.h / 2) * 0.22;
       }
 
       var dx = tx - a.x, dy = ty - a.y, dl = Math.hypot(dx, dy) || 1;
       a.fx += a.m * (v0 * dx / dl - a.vx) / PH.TAU;
       a.fy += a.m * (v0 * dy / dl - a.vy) / PH.TAU;
 
-      // Dynamic Deflection Pillars
+      // Deflection Pillars Contact & Deflection
       for(var pIdx = 0; pIdx < S.pillars.length; pIdx++){
         var pil = S.pillars[pIdx];
         var px = a.x - pil.x, py = a.y - pil.y, pd = Math.hypot(px, py) || 1, pg = pd - a.r - pil.r;
@@ -788,7 +823,7 @@ function step(dt){
       a.fy += a.m * PH.G;
     }
 
-    // Inter-Agent Contact Relaxation & Momentum Push Transmission
+    // Inter-Agent Contact Relaxation & Force Chains
     var cxi = (a.x / cell) | 0, cyi = (a.y / cell) | 0;
     for(var ox = -1; ox <= 1; ox++){
       for(var oy = -1; oy <= 1; oy++){
@@ -814,9 +849,9 @@ function step(dt){
             a.f += fc;
             b.f += fc;
 
-            // Domino momentum push transfer
-            if(a.x < b.x) b.vx += a.vx * 0.08;
-            else a.vx += b.vx * 0.08;
+            // Domino rear push force transmission
+            if(a.x < b.x) b.vx += a.vx * 0.12;
+            else a.vx += b.vx * 0.12;
           }
           a.fx += fnx; a.fy += fny;
           b.fx -= fnx; b.fy -= fny;
@@ -837,15 +872,21 @@ function step(dt){
       var wf = Math.min(PH.A * Math.exp(wn / PH.B), 5 * PH.A);
       a.fx += wf * wx / wd;
       a.fy += wf * wy / wd;
+
       if(wn > 0){
         var wc = Math.min(PH.KN * wn, FMAX);
         a.fx += wc * wx / wd;
         a.fy += wc * wy / wd;
         a.f += wc;
 
+        // Physical wall contact crush
         if(SC.type === "gate" && ax === SC.wallX){
           if(qy < SC.gy0) S.panels[0] += wc * dt;
           else S.panels[1] += wc * dt;
+
+          // Tangential sliding friction along the barrier toward the gate opening
+          var slideDir = (qy < SC.h / 2) ? 1.0 : -1.0;
+          a.fy += slideDir * (wc * 0.35);
         } else if(SC.type === "bench"){
           if(ay === S.plateY && by === S.plateY) S.panels[0] += wc * dt;
           else if(ay === SC.h && by === SC.h) S.panels[1] += wc * dt;
@@ -884,29 +925,43 @@ function step(dt){
 /* ---------- metrics & sector coordinate pinpointing ---------- */
 function measure(dtReal){
   var bx = SC.box, A = S.agents, sum = 0, n = 0, pk = 0, i, a;
-  var maxForceAgent = null;
+
+  // Track max force per sector
+  var secCounts = new Int32Array(20);
+  var secForces = new Float32Array(20);
 
   for(i = 0; i < A.length; i++){
     a = A[i];
+    var cIdx = Math.min(4, Math.max(0, Math.floor((a.x / SC.w) * 5)));
+    var rIdx = Math.min(3, Math.max(0, Math.floor((a.y / SC.h) * 4)));
+    var sIdx = rIdx * 5 + cIdx;
+    secCounts[sIdx]++;
+    secForces[sIdx] += a.f;
+
     if(a.x >= bx.x0 && a.x <= bx.x1 && a.y >= bx.y0 && a.y <= bx.y1){
       n++; sum += a.f;
-      if(a.f > pk){
-        pk = a.f;
-        maxForceAgent = a;
-      }
+      if(a.f > pk) pk = a.f;
     }
   }
 
-  if(maxForceAgent){
-    S.hotspot.x = maxForceAgent.x;
-    S.hotspot.y = maxForceAgent.y;
-    var cIdx = Math.min(4, Math.max(0, Math.floor((maxForceAgent.x / SC.w) * 5)));
-    var rIdx = Math.min(3, Math.max(0, Math.floor((maxForceAgent.y / SC.h) * 4)));
-    S.hotspot.sector = SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx];
+  // Find Peak Hotspot Sector across all 20 sectors
+  var bestIdx = 13; // default C4 (row 2, col 3)
+  var bestScore = -1;
+  for(var s = 0; s < 20; s++){
+    var score = secForces[s] + secCounts[s] * 40.0;
+    if(score > bestScore){
+      bestScore = score;
+      bestIdx = s;
+    }
   }
+  var bestR = Math.floor(bestIdx / 5);
+  var bestC = bestIdx % 5;
+  S.hotspot.sector = SECTOR_ROWS[bestR] + SECTOR_COLS[bestC];
+  S.hotspot.x = (bestC + 0.5) * (SC.w / 5);
+  S.hotspot.y = (bestR + 0.5) * (SC.h / 4);
 
   var area = (bx.x1 - bx.x0) * (bx.y1 - bx.y0), den = n / area;
-  var mean = n ? sum / n : 0, ratio = mean > 20 ? pk / mean : 0;
+  var mean = n ? sum / n : 0, ratio = mean > 15 ? pk / mean : 0;
   var k = 1 - Math.exp(-dtReal / 0.45);
   S.m.den += (den - S.m.den) * k;
   S.m.pk += (pk - S.m.pk) * k;
@@ -985,15 +1040,15 @@ function draw(){
   function X(x){ return ox + x * sc; }
   function Y(y){ return oy + y * sc; }
 
-  /* 5x4 Sector Grid Lines on Arena Floor */
+  /* 1. 5x4 Sector Grid Lines on Arena Floor */
   var secW = SC.w / 5;
   var secH = SC.h / 4;
 
   g.fillStyle = S.photo ? "#04070B" : "#0B1116";
   g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
 
-  // Sector lines & text
-  g.strokeStyle = "rgba(40, 52, 61, 0.7)";
+  // Clearly visible sector grid lines
+  g.strokeStyle = "rgba(79, 179, 217, 0.20)";
   g.lineWidth = 1;
   for(var c = 1; c < 5; c++){
     g.beginPath(); g.moveTo(X(c * secW), Y(0)); g.lineTo(X(c * secW), Y(SC.h)); g.stroke();
@@ -1002,31 +1057,34 @@ function draw(){
     g.beginPath(); g.moveTo(X(0), Y(rw * secH)); g.lineTo(X(SC.w), Y(rw * secH)); g.stroke();
   }
 
-  g.fillStyle = "rgba(100, 117, 127, 0.35)";
-  g.font = "600 10.5px 'IBM Plex Mono', monospace";
+  // High-contrast, glanceable sector labels (A1 ... D5)
+  g.fillStyle = "rgba(147, 164, 177, 0.70)";
+  g.font = "600 12px 'IBM Plex Mono', monospace";
   for(var rIdx = 0; rIdx < 4; rIdx++){
     for(var cIdx = 0; cIdx < 5; cIdx++){
-      g.fillText(SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx], X(cIdx * secW) + 6, Y(rIdx * secH) + 15);
+      g.fillText(SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx], X(cIdx * secW) + 8, Y(rIdx * secH) + 18);
     }
   }
 
-  // Active Hotspot Sector Highlight Bounding Box
-  if(S.lvl >= 1 && SC.type === "gate"){
+  // 2. Active Hotspot Sector Bounding Box & Target Locator
+  if(SC.type === "gate"){
     var hsC = Math.min(4, Math.max(0, Math.floor((S.hotspot.x / SC.w) * 5)));
     var hsR = Math.min(3, Math.max(0, Math.floor((S.hotspot.y / SC.h) * 4)));
-    g.strokeStyle = S.lvl === 2 ? "rgba(212, 81, 58, 0.85)" : "rgba(217, 163, 60, 0.8)";
-    g.lineWidth = 2;
+
+    // Highlight bounding box around active hotspot sector
+    g.strokeStyle = S.lvl === 2 ? "#D4513A" : S.lvl === 1 ? "#D9A33C" : "rgba(79, 179, 217, 0.65)";
+    g.lineWidth = S.lvl >= 1 ? 2.5 : 1.5;
     g.strokeRect(X(hsC * secW), Y(hsR * secH), secW * sc, secH * sc);
 
-    // Pulse target ring at hotspot
-    var pulseR = 8 + 4 * Math.sin(S.t * 6);
-    g.strokeStyle = S.lvl === 2 ? "#D4513A" : "#D9A33C";
+    // Target Locator Ring
+    var pulseR = (S.lvl === 2 ? 14 : 10) + 4 * Math.sin(S.t * 7);
+    g.strokeStyle = S.lvl === 2 ? "#D4513A" : S.lvl === 1 ? "#D9A33C" : "rgba(79, 179, 217, 0.85)";
     g.beginPath();
-    g.arc(X(S.hotspot.x), Y(S.hotspot.y), Math.max(3, pulseR), 0, Math.PI * 2);
+    g.arc(X(S.hotspot.x), Y(S.hotspot.y), Math.max(4, pulseR), 0, Math.PI * 2);
     g.stroke();
   }
 
-  // Measurement Zone Boundary
+  // Measurement zone
   if(!S.photo){
     g.setLineDash([5, 4]);
     g.strokeStyle = "#2E4654";
@@ -1035,39 +1093,59 @@ function draw(){
     g.setLineDash([]);
   }
 
-  /* Structural Walls & Physical Photoelastic Light-Up */
+  /* 4. SOLID BARRIER WALLS & PHYSICAL PHOTOELASTIC MATERIAL LIGHT-UP */
   var pmax = 4000;
   if(SC.type === "gate"){
-    // Solid Barrier Slabs
-    var barW = Math.max(5, 0.16 * sc);
-
-    // Upper Wall (Flamant Stress Lobes inside solid material)
+    var barW = Math.max(6, 0.16 * sc);
     var u1 = Math.min(S.panels[0] / pmax, 1);
-    if(u1 > 0.15 && S.photo){
-      g.fillStyle = isoCol(u1 * 2.8);
-      g.shadowColor = u1 > 0.6 ? "#D4513A" : "#D9A33C";
-      g.shadowBlur = 18 * u1;
-      g.fillRect(X(SC.wallX), Y(0), barW * 1.5, (SC.gy0 - 0) * sc);
-      g.shadowBlur = 0;
-    } else {
-      g.fillStyle = "#1E2A33";
-      g.fillRect(X(SC.wallX), Y(0), barW, (SC.gy0 - 0) * sc);
-    }
-
-    // Lower Wall (Flamant Stress Lobes inside solid material)
     var u2 = Math.min(S.panels[1] / pmax, 1);
-    if(u2 > 0.15 && S.photo){
-      g.fillStyle = isoCol(u2 * 2.8);
-      g.shadowColor = u2 > 0.6 ? "#D4513A" : "#D9A33C";
-      g.shadowBlur = 18 * u2;
-      g.fillRect(X(SC.wallX), Y(SC.gy1), barW * 1.5, (SC.h - SC.gy1) * sc);
+
+    // SOLID BARRIER WALL - TOP SECTION
+    g.fillStyle = "#1E2A33";
+    g.fillRect(X(SC.wallX), Y(0), barW, (SC.gy0 - 0) * sc);
+
+    // Upper Barrier Photoelastic Light-Up & Concentric Flamant Lobes
+    if(u1 > 0.04 || S.photo){
+      var fVal1 = Math.max(u1, S.photo ? 0.25 : 0) * 2.8;
+      // Radiant Flamant stress lobes radiating inside the solid wall
+      for(var step = 3; step >= 1; step--){
+        var lobeR = (step * 14 + u1 * 30);
+        g.fillStyle = isoCol(fVal1 * (step / 3.0));
+        g.globalAlpha = 0.5 + u1 * 0.45;
+        g.beginPath();
+        g.arc(X(SC.wallX), Y(SC.gy0 * 0.6), lobeR, -Math.PI / 2, Math.PI / 2);
+        g.fill();
+        g.globalAlpha = 1.0;
+      }
+      g.shadowColor = u1 > 0.5 ? "#D4513A" : "#D9A33C";
+      g.shadowBlur = 18 * u1;
+      g.fillRect(X(SC.wallX), Y(0), barW * 1.4, (SC.gy0 - 0) * sc);
       g.shadowBlur = 0;
-    } else {
-      g.fillStyle = "#1E2A33";
-      g.fillRect(X(SC.wallX), Y(SC.gy1), barW, (SC.h - SC.gy1) * sc);
     }
 
-    // Barrier edge strokes
+    // SOLID BARRIER WALL - BOTTOM SECTION
+    g.fillStyle = "#1E2A33";
+    g.fillRect(X(SC.wallX), Y(SC.gy1), barW, (SC.h - SC.gy1) * sc);
+
+    // Lower Barrier Photoelastic Light-Up & Concentric Flamant Lobes
+    if(u2 > 0.04 || S.photo){
+      var fVal2 = Math.max(u2, S.photo ? 0.25 : 0) * 2.8;
+      for(var step2 = 3; step2 >= 1; step2--){
+        var lobeR2 = (step2 * 14 + u2 * 30);
+        g.fillStyle = isoCol(fVal2 * (step2 / 3.0));
+        g.globalAlpha = 0.5 + u2 * 0.45;
+        g.beginPath();
+        g.arc(X(SC.wallX), Y(SC.gy1 + (SC.h - SC.gy1) * 0.4), lobeR2, -Math.PI / 2, Math.PI / 2);
+        g.fill();
+        g.globalAlpha = 1.0;
+      }
+      g.shadowColor = u2 > 0.5 ? "#D4513A" : "#D9A33C";
+      g.shadowBlur = 18 * u2;
+      g.fillRect(X(SC.wallX), Y(SC.gy1), barW * 1.4, (SC.h - SC.gy1) * sc);
+      g.shadowBlur = 0;
+    }
+
+    // Barrier edge outline
     g.strokeStyle = (u1 > 0.6 || u2 > 0.6) ? "#D4513A" : (u1 > 0.25 || u2 > 0.25) ? "#D9A33C" : "#55646F";
     g.lineWidth = barW;
     g.beginPath();
@@ -1075,7 +1153,7 @@ function draw(){
     g.moveTo(X(SC.wallX), Y(SC.gy1)); g.lineTo(X(SC.wallX), Y(SC.h));
     g.stroke();
 
-    // Barrier Sensing Strips on front contact face
+    // Barrier sensing strips
     var pl = [[SC.gy0 - 2.2, SC.gy0, S.panels[0]], [SC.gy1, SC.gy1 + 2.2, S.panels[1]]];
     for(var p = 0; p < 2; p++){
       var u = Math.min(pl[p][2] / pmax, 1);
@@ -1085,42 +1163,50 @@ function draw(){
       g.globalAlpha = 1;
     }
 
-    // Dynamic Deflection Pillars (Photoelastic Specimens)
+    // 3. DYNAMIC DEFLECTION PILLARS WITH INTERNAL DIAMETRAL COMPRESSION FRINGE LOOPS
     for(var o = 0; o < S.pillars.length; o++){
       var obst = S.pillars[o];
-      var obstU = Math.min(obst.stress / 2500, 1);
+      var obstU = Math.min(obst.stress / 2200, 1);
 
       g.beginPath();
-      g.arc(X(obst.x), Y(obst.y), Math.max(1, obst.r * sc), 0, Math.PI * 2);
+      g.arc(X(obst.x), Y(obst.y), Math.max(2, obst.r * sc), 0, Math.PI * 2);
 
-      if(S.photo && obstU > 0.1){
-        g.fillStyle = isoCol(obstU * 2.8);
-        g.shadowColor = obstU > 0.6 ? "#D4513A" : "#D9A33C";
-        g.shadowBlur = 16 * obstU;
-        g.fill();
+      // Photoelastic light-up under crowd deflection pressure
+      if(obstU > 0.05 || S.photo){
+        var pilF = Math.max(obstU, S.photo ? 0.35 : 0) * 2.8;
+        // Butterfly diametral compression fringe rings
+        for(var sRing = 3; sRing >= 1; sRing--){
+          g.fillStyle = isoCol(pilF * (sRing / 3.0));
+          g.beginPath();
+          g.arc(X(obst.x), Y(obst.y), Math.max(1, obst.r * sc * (sRing / 3.0)), 0, Math.PI * 2);
+          g.fill();
+        }
+        g.shadowColor = obstU > 0.5 ? "#D4513A" : "#D9A33C";
+        g.shadowBlur = 14 * obstU;
+        g.stroke();
         g.shadowBlur = 0;
       } else {
-        g.fillStyle = obstU > 0.5 ? "#5C4518" : "#2E3B44";
+        g.fillStyle = "#263540";
         g.fill();
       }
 
-      g.strokeStyle = obstU > 0.6 ? "#D4513A" : obstU > 0.2 ? "#D9A33C" : "#6C7D88";
-      g.lineWidth = 2;
+      g.strokeStyle = obstU > 0.6 ? "#D4513A" : obstU > 0.2 ? "#D9A33C" : "#4FB3D9";
+      g.lineWidth = 2.5;
       g.stroke();
 
-      // Pillar core pin
+      // Pillar center anchor pin
       g.fillStyle = "#141B21";
       g.beginPath();
-      g.arc(X(obst.x), Y(obst.y), Math.max(0.5, obst.r * sc * 0.35), 0, Math.PI * 2);
+      g.arc(X(obst.x), Y(obst.y), Math.max(1, obst.r * sc * 0.32), 0, Math.PI * 2);
       g.fill();
     }
 
     g.fillStyle = "#3E9E6B";
-    g.font = "600 11px 'IBM Plex Mono', monospace";
-    g.fillText("EXIT →", X(SC.wallX) + 12, Y(SC.h / 2) + 4);
+    g.font = "600 12px 'IBM Plex Mono', monospace";
+    g.fillText("EXIT →", X(SC.wallX) + 14, Y(SC.h / 2) + 4);
 
   } else {
-    // Lab bench boundary
+    // Lab bench mode
     g.strokeStyle = "#55646F";
     g.lineWidth = Math.max(4, 0.12 * sc);
     g.beginPath();
@@ -1143,22 +1229,22 @@ function draw(){
     g.fillText("LOAD CELL", X(0.25), Y(SC.h) + Math.max(18, 0.1 * sc + 16));
   }
 
-  // Panic Incidents Shockwave Contagion Circles
+  // Panic Shockwave Expanding Contagion Rings
   for(var j = 0; j < S.incidents.length; j++){
     var inc = S.incidents[j];
-    g.strokeStyle = "rgba(212, 81, 58, 0.8)";
-    g.lineWidth = 2;
+    g.strokeStyle = "rgba(212, 81, 58, 0.85)";
+    g.lineWidth = 2.5;
     g.beginPath();
-    g.arc(X(inc.x), Y(inc.y), Math.max(1, inc.radius * sc), 0, Math.PI * 2);
+    g.arc(X(inc.x), Y(inc.y), Math.max(2, inc.radius * sc), 0, Math.PI * 2);
     g.stroke();
 
     g.fillStyle = "#D4513A";
     g.beginPath();
-    g.arc(X(inc.x), Y(inc.y), 4, 0, Math.PI * 2);
+    g.arc(X(inc.x), Y(inc.y), 5, 0, Math.PI * 2);
     g.fill();
   }
 
-  // Agents
+  // Crowd Agents
   var A = S.agents, FS = 400;
   for(i = 0; i < A.length; i++){
     var a = A[i], rr = Math.max(0.5, a.r * sc);
@@ -1183,15 +1269,15 @@ function draw(){
   }
 
   if(S.surgeT > 0){
-    g.fillStyle = "rgba(212,81,58,.12)";
+    g.fillStyle = "rgba(212,81,58,.14)";
     g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
     g.fillStyle = "#D4513A";
     g.font = "700 14px 'Barlow Condensed', sans-serif";
-    g.fillText("SURGE FROM THE REAR — MASS REAR COMPRESSION", X(0.35), Y(0) + 22);
+    g.fillText("REAR SURGE ACTIVE — COLLECTIVE FORWARD PUSH", X(0.35), Y(0) + 24);
   }
 }
 
-/* ---------- interactive 40-second chart with hover scrub ---------- */
+/* ---------- interactive 40-second chart ---------- */
 var hoverX = null;
 function drawChart(){
   var r = chart.getBoundingClientRect(), w = r.width, h = r.height;
@@ -1307,7 +1393,7 @@ var ADVB = [
 ];
 
 function ui(){
-  var ld = lvlOf(S.m.den, TH.den), lp = lvlOf(S.m.pk, TH.pk), lr = S.m.pk > 200 ? lvlOf(S.m.pr, TH.pr) : 0;
+  var ld = lvlOf(S.m.den, TH.den), lp = lvlOf(S.m.pk, TH.pk), lr = S.m.pk > 150 ? lvlOf(S.m.pr, TH.pr) : 0;
   var L = Math.max(ld, lp, lr);
 
   $("tDen").setAttribute("data-l", ld); $("vDen").textContent = S.m.den.toFixed(1);
@@ -1318,7 +1404,7 @@ function ui(){
 
   var al = $("alarm");
   $("alarmSector").textContent = "Sector " + S.hotspot.sector;
-  $("dispatchText").textContent = "Dispatch marshals → Sector " + S.hotspot.sector;
+  $("dispatchText").textContent = (L >= 1 ? "🚨 DISPATCH MARSHALS → SECTOR " : "STANDBY MARSHALS → SECTOR ") + S.hotspot.sector;
 
   if(L !== S.lvl){
     var AD = SC.type === "gate" ? ADV : ADVB;
@@ -1371,7 +1457,7 @@ function frame(ts){
       S.spawnAcc += S.inflow * sub;
       while(S.spawnAcc >= 1 && S.agents.length < 240){
         S.spawnAcc -= 1;
-        S.agents.push(mkAgent(0.35 + Math.random() * 0.5, 0.5 + Math.random() * (SC.h - 1.0)));
+        S.agents.push(mkAgent(0.35 + Math.random() * 0.5, 0.4 + Math.random() * (SC.h - 0.8)));
       }
       if(S.spawnAcc > 1) S.spawnAcc = 1;
     }
@@ -1438,33 +1524,33 @@ $("press").oninput = function(){
   S.plateY = S.pileTop - 0.04 + (S.press / 100) * 0.50;
 };
 
-// Canvas Tools: Pillar placement & Incident triggering
-$("toolPillar").onclick = function(){
+// 3. CANVAS TOOLS: PILLAR PLACEMENT & INCIDENT SHOCKWAVES
+function updateToolState(){
+  $("toolPillar").setAttribute("aria-pressed", S.clickTool === "pillar" ? "true" : "false");
+  $("toolPanic").setAttribute("aria-pressed", S.clickTool === "panic" ? "true" : "false");
   if(S.clickTool === "pillar"){
-    S.clickTool = "none";
-    this.setAttribute("aria-pressed", "false");
-    $("canvasHint").textContent = "Tool mode: Navigate.";
+    $("toolStatusTag").textContent = "MODE: PILLAR TOOL ACTIVE";
+    $("canvasHint").style.color = "var(--steel)";
+  } else if(S.clickTool === "panic"){
+    $("toolStatusTag").textContent = "MODE: INCIDENT TOOL ACTIVE";
+    $("canvasHint").style.color = "#FFB8AD";
   } else {
-    S.clickTool = "pillar";
-    this.setAttribute("aria-pressed", "true");
-    $("toolPanic").setAttribute("aria-pressed", "false");
-    $("canvasHint").textContent = "Tool: Pillar active. Click anywhere on the floor to drop or remove a deflection pillar.";
+    $("toolStatusTag").textContent = "MODE: NAVIGATE";
+    $("canvasHint").style.color = "rgba(232,239,244,0.6)";
   }
+}
+
+$("toolPillar").onclick = function(){
+  S.clickTool = (S.clickTool === "pillar") ? "none" : "pillar";
+  updateToolState();
 };
 
 $("toolPanic").onclick = function(){
-  if(S.clickTool === "panic"){
-    S.clickTool = "none";
-    this.setAttribute("aria-pressed", "false");
-    $("canvasHint").textContent = "Tool mode: Navigate.";
-  } else {
-    S.clickTool = "panic";
-    this.setAttribute("aria-pressed", "true");
-    $("toolPillar").setAttribute("aria-pressed", "false");
-    $("canvasHint").textContent = "Tool: Incident active. Click anywhere inside the crowd to trigger a localized distress epicenter.";
-  }
+  S.clickTool = (S.clickTool === "panic") ? "none" : "panic";
+  updateToolState();
 };
 
+// Click directly on canvas to drop pillars or trigger incident shockwaves
 view.addEventListener("click", function(e){
   if(S.scene !== "gate") return;
   var r = view.getBoundingClientRect();
@@ -1473,32 +1559,34 @@ view.addEventListener("click", function(e){
   var wx = (e.clientX - r.left - ox) / sc;
   var wy = (e.clientY - r.top - oy) / sc;
 
-  if(wx < 0 || wx > SC.w || wy < 0 || wy > SC.h) return;
+  if(wx < 0.2 || wx > SC.w - 0.2 || wy < 0.2 || wy > SC.h - 0.2) return;
 
   var cIdx = Math.min(4, Math.max(0, Math.floor((wx / SC.w) * 5)));
   var rIdx = Math.min(3, Math.max(0, Math.floor((wy / SC.h) * 4)));
   var clickedSector = SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx];
 
-  if(S.clickTool === "pillar"){
-    // Toggle/remove existing pillar or add new one
+  if(S.clickTool === "pillar" || S.clickTool === "none"){
+    // Check if clicking existing pillar to remove
     var removed = false;
     for(var o = 0; o < S.pillars.length; o++){
-      if(Math.hypot(wx - S.pillars[o].x, wy - S.pillars[o].y) < S.pillars[o].r + 0.35){
+      if(Math.hypot(wx - S.pillars[o].x, wy - S.pillars[o].y) < S.pillars[o].r + 0.40){
         S.pillars.splice(o, 1);
         removed = true;
         pushLog(0, "Pillar removed at Sector " + clickedSector);
         break;
       }
     }
-    if(!removed && wx < SC.wallX - 0.5 && wx > 1.0){
-      S.pillars.push({ x: wx, y: wy, r: 0.33, stress: 0 });
+    // Add new pillar anywhere on the arena floor (ahead of the wall)
+    if(!removed && wx < SC.wallX - 0.45 && wx > 0.8){
+      S.pillars.push({ x: wx, y: wy, r: 0.35, stress: 0 });
       pushLog(0, "Deflection pillar placed in Sector " + clickedSector);
     }
     renderLog();
   } else if(S.clickTool === "panic"){
-    S.incidents.push({ x: wx, y: wy, radius: 0.2, life: 3.5 });
+    // Trigger localized shockwave incident
+    S.incidents.push({ x: wx, y: wy, radius: 0.2, life: 3.8 });
     beep();
-    pushLog(2, "SURGE INCIDENT triggered in Sector " + clickedSector + " &rarr; Crowd shockwave propagating.");
+    pushLog(2, "SHOCKWAVE INCIDENT in Sector " + clickedSector + " &rarr; Social panic contagion spreading.");
     renderLog();
   }
 });
@@ -1516,7 +1604,7 @@ $("viewBtn").onclick = function(){
 };
 
 $("surge").onclick = function(){
-  S.surgeT = 4;
+  S.surgeT = 4.5;
   beep();
   pushLog(2, "Surge: rear ranks pushing forward toward bottleneck.");
   renderLog();
@@ -1556,6 +1644,7 @@ $("tabBench").onclick = function(){ tab("bench"); };
 fit(view);
 reset();
 mode();
+updateToolState();
 requestAnimationFrame(function(t){
   last = t;
   requestAnimationFrame(frame);
