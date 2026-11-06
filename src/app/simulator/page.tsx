@@ -256,6 +256,7 @@ export default function SimulatorPage() {
     let escapedWindow: number[] = [];
     let spawnAccumulator = 0;
     let lastTime = performance.now();
+    let lastStateUpdateTime = performance.now();
 
     // Barrier panels accumulated force in Newtons
     let barrierP1Accum = 0;
@@ -917,21 +918,9 @@ export default function SimulatorPage() {
           selPSI = +(Math.min(100, (selMaxF / MAX_CALIBRATED_FORCE) * 100).toFixed(1));
         }
 
-        setSelectedSectorStress(selPSI);
-        setSelectedSectorPeakForce(Math.round(selMaxF));
-        setSelectedSectorAgents(selCnt);
-
-        setPeakStressIndex(+(normalizedPSI.toFixed(1)));
-        setRawPeakForce(Math.round(globalMaxForce));
-        setActivePopulation(agents.length);
-        setThroughputPerMin(throughputCalculated);
-        setHotspotSector(peakSectorName);
-        setSectorTiles(currentSectors);
-
+        // Always maintain instantaneous values in telemetry ref for 300ms network sync
         const p1_kN = +(barrierP1Accum / 1000).toFixed(2);
         const p2_kN = +(barrierP2Accum / 1000).toFixed(2);
-        setBarrierP1(p1_kN);
-        setBarrierP2(p2_kN);
 
         currentTelemetryRef.current = {
           peakStress: normalizedPSI,
@@ -948,12 +937,30 @@ export default function SimulatorPage() {
           barrierP2: p2_kN,
           sectorGrid: currentSectors,
         };
+
+        // Throttle React state updates to 10Hz (every 100ms) to maintain blistering 60FPS canvas physics
+        if (timeNow - lastStateUpdateTime >= 100) {
+          lastStateUpdateTime = timeNow;
+          setSelectedSectorStress(selPSI);
+          setSelectedSectorPeakForce(Math.round(selMaxF));
+          setSelectedSectorAgents(selCnt);
+          setPeakStressIndex(+(normalizedPSI.toFixed(1)));
+          setRawPeakForce(Math.round(globalMaxForce));
+          setActivePopulation(agents.length);
+          setThroughputPerMin(throughputCalculated);
+          setHotspotSector(peakSectorName);
+          setSectorTiles(currentSectors);
+          setBarrierP1(p1_kN);
+          setBarrierP2(p2_kN);
+        }
       }
 
       // ---------------------------------------------------------------------
       // 4. ADVANCED CANVAS RENDERING: Photoelastic Bloom & 5x4 Sector Grid
       // ---------------------------------------------------------------------
-      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      // Precision Dark Laboratory Arena Floor
+      ctx.fillStyle = '#0B0F14';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       const sectorWidth = CANVAS_WIDTH / 5;
       const sectorHeight = CANVAS_HEIGHT / 4;
@@ -963,7 +970,7 @@ export default function SimulatorPage() {
 
       // A. 5x4 Sector Grid Lines on Arena Floor
       ctx.save();
-      ctx.strokeStyle = '#0E171F';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
 
       for (let c = 1; c < 5; c++) {
@@ -980,7 +987,7 @@ export default function SimulatorPage() {
       }
 
       // Monospace Sector Grid Coordinate Labels (A1...D5)
-      ctx.font = "10px 'IBM Plex Mono', monospace";
+      ctx.font = "10px 'JetBrains Mono', monospace";
       for (let r = 0; r < 4; r++) {
         for (let c = 0; c < 5; c++) {
           const secName = `${SECTOR_ROWS[r]}${c + 1}`;
@@ -989,7 +996,7 @@ export default function SimulatorPage() {
 
           if (isHot) {
             // Hotspot Sector Highlight Bounding Box
-            const hotCol = currentTelemetryRef.current.peakStress >= 85 ? '#D4513A' : '#D9A33C';
+            const hotCol = currentTelemetryRef.current.peakStress >= 85 ? '#EF4444' : '#F59E0B';
             ctx.strokeStyle = hotCol;
             ctx.lineWidth = 2;
             ctx.strokeRect(c * sectorWidth + 2, r * sectorHeight + 2, sectorWidth - 4, sectorHeight - 4);
@@ -1024,28 +1031,44 @@ export default function SimulatorPage() {
             ctx.stroke();
 
             ctx.fillStyle = '#38BDF8';
-            ctx.font = "9px 'IBM Plex Mono', monospace";
+            ctx.font = "9px 'JetBrains Mono', monospace";
             ctx.fillText(`[BOX ${secName}: ${currentTelemetryRef.current.selectedSectorStress} PSI]`, bx + 6, by + bh - 6);
           }
 
-          ctx.fillStyle = isHot ? '#D9A33C' : 'rgba(79, 179, 217, 0.45)';
+          ctx.fillStyle = isHot ? '#F59E0B' : 'rgba(56, 189, 248, 0.5)';
           ctx.fillText(secName, c * sectorWidth + 8, r * sectorHeight + 16);
         }
       }
       ctx.restore();
 
-      // B. Static Wall Boundaries at Top (Solid Photoelastic Gate Slabs)
+      // B. Static Wall Boundaries at Top (Solid Structural Photoelastic Barriers)
       ctx.save();
-      ctx.fillStyle = '#10171D';
+      ctx.fillStyle = '#16202C';
       ctx.fillRect(0, 0, gateLeftEdge, WALL_BOTTOM_Y);
       ctx.fillRect(gateRightEdge, 0, CANVAS_WIDTH - gateRightEdge, WALL_BOTTOM_Y);
+
+      // Architectural hazard hatching on barrier slabs
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let x = -WALL_BOTTOM_Y; x < gateLeftEdge; x += 18) {
+        ctx.beginPath();
+        ctx.moveTo(Math.max(0, x), 0);
+        ctx.lineTo(Math.min(gateLeftEdge, x + WALL_BOTTOM_Y), WALL_BOTTOM_Y);
+        ctx.stroke();
+      }
+      for (let x = gateRightEdge - WALL_BOTTOM_Y; x < CANVAS_WIDTH; x += 18) {
+        ctx.beginPath();
+        ctx.moveTo(Math.max(gateRightEdge, x), 0);
+        ctx.lineTo(Math.min(CANVAS_WIDTH, x + WALL_BOTTOM_Y), WALL_BOTTOM_Y);
+        ctx.stroke();
+      }
 
       // Photoelastic Contact Stress Lines on Barrier Walls
       const p1Ratio = Math.min(1, barrierP1Accum / 3000);
       const p2Ratio = Math.min(1, barrierP2Accum / 3000);
 
       // Left Wall Sensing Edge
-      ctx.strokeStyle = p1Ratio > 0.7 ? '#D4513A' : p1Ratio > 0.3 ? '#D9A33C' : '#4FB3D9';
+      ctx.strokeStyle = p1Ratio > 0.7 ? '#EF4444' : p1Ratio > 0.3 ? '#F59E0B' : '#38BDF8';
       ctx.lineWidth = 3.5;
       ctx.beginPath();
       ctx.moveTo(0, WALL_BOTTOM_Y);
@@ -1054,17 +1077,23 @@ export default function SimulatorPage() {
       ctx.stroke();
 
       // Right Wall Sensing Edge
-      ctx.strokeStyle = p2Ratio > 0.7 ? '#D4513A' : p2Ratio > 0.3 ? '#D9A33C' : '#4FB3D9';
+      ctx.strokeStyle = p2Ratio > 0.7 ? '#EF4444' : p2Ratio > 0.3 ? '#F59E0B' : '#38BDF8';
       ctx.beginPath();
       ctx.moveTo(gateRightEdge, 0);
       ctx.lineTo(gateRightEdge, WALL_BOTTOM_Y);
       ctx.lineTo(CANVAS_WIDTH, WALL_BOTTOM_Y);
       ctx.stroke();
 
-      // Gate Aperture Guide Markers
-      ctx.fillStyle = 'rgba(79, 179, 217, 0.7)';
-      ctx.font = "9px 'IBM Plex Mono', monospace";
-      ctx.fillText(`GATE: ${currentGateWidth}PX [P1: ${(barrierP1Accum / 1000).toFixed(2)}kN | P2: ${(barrierP2Accum / 1000).toFixed(2)}kN]`, gateLeftEdge + 6, 38);
+      // Gate Aperture Guide Markers & Directional Signage
+      ctx.fillStyle = '#38BDF8';
+      ctx.font = "9px 'JetBrains Mono', monospace";
+      ctx.fillText(`GATE: ${currentGateWidth}PX [P1: ${(barrierP1Accum / 1000).toFixed(2)}kN | P2: ${(barrierP2Accum / 1000).toFixed(2)}kN]`, gateLeftEdge + 6, 22);
+
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
+      ctx.font = "9px 'JetBrains Mono', monospace";
+      ctx.textAlign = 'center';
+      ctx.fillText('▲ ▲ ▲ EGRESS CORRIDOR ▲ ▲ ▲', CANVAS_WIDTH / 2, 46);
+      ctx.textAlign = 'left';
       ctx.restore();
 
       // C. Deflection Pillars Rendering with Photoelastic Stress Rings
@@ -1076,33 +1105,30 @@ export default function SimulatorPage() {
         ctx.beginPath();
         ctx.arc(pil.x, pil.y, pil.radius, 0, Math.PI * 2);
 
-        if (pStressU > 0.05) {
-          ctx.fillStyle = pStressU > 0.6 ? 'rgba(212, 81, 58, 0.4)' : 'rgba(217, 163, 60, 0.4)';
-          ctx.shadowBlur = 15 * pStressU;
-          ctx.shadowColor = pStressU > 0.6 ? '#D4513A' : '#D9A33C';
-          ctx.fill();
+        ctx.fillStyle = '#1E293B';
+        ctx.fill();
 
-          // Concentric fringe rings
-          ctx.strokeStyle = pStressU > 0.6 ? '#D4513A' : '#D9A33C';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = '#1A252E';
-          ctx.strokeStyle = '#4FB3D9';
-          ctx.lineWidth = 1.8;
-          ctx.fill();
+        ctx.strokeStyle = pStressU > 0.6 ? '#EF4444' : pStressU > 0.25 ? '#F59E0B' : '#38BDF8';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        if (pStressU > 0.05) {
+          ctx.beginPath();
+          ctx.arc(pil.x, pil.y, pil.radius + 6 + pStressU * 12, 0, Math.PI * 2);
+          ctx.strokeStyle = pStressU > 0.6 ? 'rgba(239, 68, 68, 0.5)' : 'rgba(245, 158, 11, 0.4)';
+          ctx.lineWidth = 1.5;
           ctx.stroke();
         }
 
-        // Inner anchor pin
-        ctx.fillStyle = '#0B1013';
+        // Inner anchor core
+        ctx.fillStyle = '#38BDF8';
         ctx.beginPath();
         ctx.arc(pil.x, pil.y, pil.radius * 0.35, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = '#94A3B8';
-        ctx.font = "8px 'IBM Plex Mono', monospace";
-        ctx.fillText(`OBSTACLE`, pil.x - 20, pil.y + 4);
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText(`PILLAR`, pil.x - 14, pil.y + 3);
         ctx.restore();
       }
 
@@ -1147,17 +1173,17 @@ export default function SimulatorPage() {
         const a = agents[i];
         const stressRatio = Math.min(1, a.force / 4200);
 
-        let fillColor = 'rgba(79, 179, 217, 0.85)'; // Normal: Cyan
-        let shadowColor = 'rgba(79, 179, 217, 0.5)';
-        let shadowRadius = 0;
+        let fillColor = 'rgba(56, 189, 248, 0.88)'; // Normal: Vivid Cyber Cyan
+        let shadowColor = '#38BDF8';
+        let shadowRadius = 4;
 
         if (stressRatio >= 0.80) {
-          fillColor = 'rgba(212, 81, 58, 0.95)';    // Critical: Crimson
-          shadowColor = '#D4513A';
+          fillColor = 'rgba(239, 68, 68, 0.98)';     // Critical: Laser Crimson
+          shadowColor = '#EF4444';
           shadowRadius = 18;
         } else if (stressRatio >= 0.45) {
-          fillColor = 'rgba(217, 163, 60, 0.92)';   // Warning: Amber
-          shadowColor = '#D9A33C';
+          fillColor = 'rgba(245, 158, 11, 0.94)';    // Warning: Molten Amber
+          shadowColor = '#F59E0B';
           shadowRadius = 14;
         }
 
@@ -1184,18 +1210,18 @@ export default function SimulatorPage() {
       const sortedByForce = [...agents].sort((a, b) => b.force - a.force);
       const top3Agents = sortedByForce.slice(0, 3);
 
-      ctx.font = "9px 'IBM Plex Mono', monospace";
+      ctx.font = "9px 'JetBrains Mono', monospace";
       for (let i = 0; i < top3Agents.length; i++) {
         const ag = top3Agents[i];
         if (ag.force > 150) {
           const isCrit = ag.force >= 3600;
           const isWarn = ag.force >= 2000;
           const tagBg = isCrit
-            ? 'rgba(212, 81, 58, 0.85)'
+            ? 'rgba(239, 68, 68, 0.90)'
             : isWarn
-            ? 'rgba(217, 163, 60, 0.85)'
-            : 'rgba(20, 27, 33, 0.85)';
-          const textCol = isCrit || isWarn ? '#FFFFFF' : '#4FB3D9';
+            ? 'rgba(245, 158, 11, 0.90)'
+            : 'rgba(15, 23, 42, 0.90)';
+          const textCol = isCrit || isWarn ? '#FFFFFF' : '#38BDF8';
 
           const labelText = `[#${ag.id} F:${Math.round(ag.force)}N]`;
           const textWidth = ctx.measureText(labelText).width;
@@ -1239,70 +1265,82 @@ export default function SimulatorPage() {
   const alertColor = isCritical ? 'var(--crit)' : isWarning ? 'var(--warn)' : 'var(--steel)';
 
   return (
-    <main className="min-h-screen bg-black text-slate-100 p-3 sm:p-5 flex flex-col font-mono selection:bg-cyan-500 selection:text-black">
+    <main className="min-h-screen bg-[#F5F2EB] text-[#111111] p-3 sm:p-5 flex flex-col font-mono selection:bg-[#111111] selection:text-[#F5F2EB]">
       {/* =========================================================================
-          TOP COMMAND BAR & DIGITAL TWIN HUD HEADER
+          TOP COMMAND BAR & DIGITAL TWIN HUD HEADER (SWISS EDITORIAL THEME)
          ========================================================================= */}
-      <header className="glass-panel glass-panel-glow px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-white/10">
+      <header className="bg-white border border-black/15 shadow-sm px-4 sm:px-6 py-3 mb-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded bg-cyan-950/80 border border-cyan-400/30 flex items-center justify-center text-cyan-400 shadow-[0_0_12px_rgba(79,179,217,0.3)]">
+          <Link
+            href="/"
+            className="w-9 h-9 rounded-lg bg-[#111111] flex items-center justify-center text-[#38BDF8] shadow-sm hover:scale-105 transition-transform"
+            title="Return to Flagship Showcase"
+          >
             <Radio className="w-5 h-5 animate-pulse" />
-          </div>
+          </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-wider text-slate-100 font-sans uppercase">
+              <Link href="/" className="text-xl font-bold font-display tracking-tight text-[#111111] uppercase hover:text-black">
                 ForceSight
-              </h1>
-              <span className="text-[10px] tracking-widest px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+              </Link>
+              <span className="text-[10px] tracking-widest px-2 py-0.5 rounded bg-black/5 border border-black/10 text-[#111111] font-mono font-bold">
                 TWIN SANDBOX v2.5
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-mono tracking-wide">
+            <p className="text-[11px] text-[#111111]/60 font-mono tracking-wide">
               5&times;4 Sector Grid &middot; Deflection Pillars &middot; Helbing Social Force Model
             </p>
           </div>
         </div>
 
-        {/* Global Alert Status Pill */}
-        <div className="flex items-center gap-3">
+        {/* Global Alert Status & Actions */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div
-            className={`px-3 py-1.5 rounded border text-xs tracking-wider uppercase font-semibold flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-full border text-xs tracking-wider uppercase font-mono font-bold flex items-center gap-2 shadow-sm ${
               isCritical
-                ? 'bg-red-950/70 border-red-500 text-red-300 shadow-[0_0_15px_rgba(212,81,58,0.5)] animate-pulse'
+                ? 'bg-red-50 border-red-500 text-red-700 animate-pulse'
                 : isWarning
-                ? 'bg-amber-950/70 border-amber-500 text-amber-300 shadow-[0_0_15px_rgba(217,163,60,0.4)]'
-                : 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300'
+                ? 'bg-amber-50 border-amber-500 text-amber-800'
+                : 'bg-emerald-50 border-emerald-400 text-emerald-800'
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                isCritical ? 'bg-red-500 animate-ping' : isWarning ? 'bg-amber-500' : 'bg-cyan-400'
+                isCritical ? 'bg-[#EF4444] animate-ping' : isWarning ? 'bg-[#F59E0B]' : 'bg-[#10B981]'
               }`}
             />
             {isCritical ? 'CRITICAL OVERLOAD' : isWarning ? 'WARNING: ELEVATED' : 'FLOW OPTIMAL'}
           </div>
 
+          {/* Return to Showcase */}
+          <Link
+            href="/"
+            className="px-3 py-1.5 rounded-full bg-black/5 hover:bg-black hover:text-white border border-black/15 text-[#111111] transition flex items-center gap-1 text-xs font-mono tracking-wider uppercase"
+          >
+            <span>&larr; Showcase</span>
+          </Link>
+
           {/* Sync Link to Mobile Guard View */}
           <Link
             href="/mobile"
             target="_blank"
-            className="px-3 py-1.5 rounded bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-300 hover:text-white transition flex items-center gap-1.5 text-xs tracking-wider uppercase"
+            className="px-3 py-1.5 rounded-full bg-white border border-black/15 hover:border-black text-[#111111] transition flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase shadow-sm"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Open Mobile Guard</span>
+            <ExternalLink className="w-3.5 h-3.5 text-[#38BDF8]" />
+            <span>Guard App</span>
           </Link>
 
           {/* Holographic 3D View Toggle */}
           <button
             onClick={() => setIs3DView((prev) => !prev)}
-            className={`px-3.5 py-1.5 rounded border text-xs tracking-wider uppercase transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-full border text-xs font-mono tracking-wider uppercase transition flex items-center gap-1.5 shadow-sm ${
               is3DView
-                ? 'bg-cyan-500 text-black border-cyan-400 font-bold shadow-[0_0_18px_rgba(79,179,217,0.6)]'
-                : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:border-cyan-500'
+                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold'
+                : 'bg-white border-black/15 text-[#111111] hover:border-black'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>[3D Tactical View]</span>
+            <Layers className="w-3.5 h-3.5 text-[#38BDF8]" />
+            <span>3D View</span>
           </button>
         </div>
       </header>
@@ -1310,14 +1348,14 @@ export default function SimulatorPage() {
       {/* =========================================================================
           MAIN INTERFACE GRID: CANVAS SIMULATION & CONTROL DECK
          ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1">
-        {/* LEFT / CENTER: CANVAS SIMULATOR STAGE */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1">
+        {/* LEFT / CENTER: CANVAS SIMULATOR STAGE (INDUSTRIAL BLACK CHASSIS) */}
         <div className="lg:col-span-8 flex flex-col gap-4">
-          <div className="glass-panel p-2 flex-1 flex flex-col items-center justify-center relative overflow-hidden bg-black/90">
+          <div className="rounded-xl border border-black/20 bg-[#111111] text-[#F5F2EB] p-3 shadow-2xl flex-1 flex flex-col items-center justify-between relative overflow-hidden">
             {/* Top Canvas Bar & Interactive Tool Switcher */}
-            <div className="w-full flex flex-wrap items-center justify-between px-3 py-2 border-b border-white/5 text-[11px] text-slate-300 gap-2">
+            <div className="w-full flex flex-wrap items-center justify-between px-3 py-2 border-b border-white/10 text-[11px] text-white/80 gap-2 font-mono">
               <div className="flex items-center gap-2">
-                <span className="text-cyan-400 font-bold flex items-center gap-1">
+                <span className="text-[#38BDF8] font-bold flex items-center gap-1">
                   <Activity className="w-3.5 h-3.5" />
                   <span>TOOLS:</span>
                 </span>
@@ -1325,12 +1363,12 @@ export default function SimulatorPage() {
                 {/* Inspect Tool */}
                 <button
                   onClick={() => setActiveTool('inspect')}
-                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition ${
+                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition font-mono ${
                     activeTool === 'inspect'
-                      ? 'bg-cyan-500 text-black font-bold border-cyan-400 shadow-[0_0_8px_#4FB3D9]'
-                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
+                      ? 'bg-[#38BDF8] text-black font-bold border-transparent shadow-[0_0_8px_#38BDF8]'
+                      : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
                   }`}
-                  title="Click anywhere on the floor to pin sector reticle"
+                  title="Click anywhere on the floor to inspect sector pressure"
                 >
                   <Target className="w-3 h-3" />
                   <span>[Inspect]</span>
@@ -1339,10 +1377,10 @@ export default function SimulatorPage() {
                 {/* Pillar Placement Tool */}
                 <button
                   onClick={() => setActiveTool('pillar')}
-                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition ${
+                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition font-mono ${
                     activeTool === 'pillar'
-                      ? 'bg-cyan-500 text-black font-bold border-cyan-400 shadow-[0_0_8px_#4FB3D9]'
-                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
+                      ? 'bg-[#38BDF8] text-black font-bold border-transparent shadow-[0_0_8px_#38BDF8]'
+                      : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
                   }`}
                   title="Click anywhere on the floor to place or remove deflection pillars"
                 >
@@ -1353,37 +1391,37 @@ export default function SimulatorPage() {
                 {/* Incident Shockwave Tool */}
                 <button
                   onClick={() => setActiveTool('incident')}
-                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition ${
+                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition font-mono ${
                     activeTool === 'incident'
-                      ? 'bg-red-500 text-white font-bold border-red-400 shadow-[0_0_8px_#D4513A]'
-                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
+                      ? 'bg-[#EF4444] text-white font-bold border-transparent shadow-[0_0_8px_#EF4444]'
+                      : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
                   }`}
                   title="Click inside crowd to ignite localized panic shockwave"
                 >
                   <Bomb className="w-3 h-3" />
-                  <span>[Incident Tool]</span>
+                  <span>[Incident]</span>
                 </button>
 
                 {/* Clear Pillars */}
                 <button
                   onClick={() => clearPillarsActionRef.current?.()}
-                  className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-400 hover:text-white text-xs"
+                  className="px-2 py-1 rounded bg-white/5 border border-white/10 text-white/60 hover:text-white text-xs font-mono"
                 >
                   Clear Pillars
                 </button>
               </div>
 
-              {/* Simulation Play / Pause */}
+              {/* Simulation Play / Pause & Telemetry Ticker */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsPaused((prev) => !prev)}
-                  className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-200 hover:border-cyan-400 flex items-center gap-1"
+                  className="px-2.5 py-1 rounded bg-white/10 border border-white/15 text-xs text-white hover:border-[#38BDF8] flex items-center gap-1 font-mono"
                 >
-                  {isPaused ? <Play className="w-3 h-3 text-emerald-400" /> : <Pause className="w-3 h-3 text-amber-400" />}
+                  {isPaused ? <Play className="w-3 h-3 text-[#10B981]" /> : <Pause className="w-3 h-3 text-[#F59E0B]" />}
                   <span>{isPaused ? 'Resume' : 'Pause'}</span>
                 </button>
-                <span className="font-mono text-slate-500">
-                  SELECTED: <b className="text-cyan-300">BOX {selectedSector} ({selectedSectorStress} PSI)</b> &middot; HOTSPOT: <b className="text-amber-400">{hotspotSector}</b> &middot; PARTICLES: {activePopulation}
+                <span className="font-mono text-white/60 hidden sm:inline">
+                  FOCUS: <b className="text-[#38BDF8]">BOX {selectedSector} ({selectedSectorStress} PSI)</b> &middot; PARTICLES: {activePopulation}
                 </span>
               </div>
             </div>
@@ -1396,110 +1434,122 @@ export default function SimulatorPage() {
             >
               <canvas
                 ref={canvasRef}
-                className="w-full h-full block rounded bg-black cursor-crosshair border border-slate-800"
+                className="w-full h-full block rounded bg-black cursor-crosshair border border-white/10"
               />
             </div>
 
             {/* Canvas Bottom Legend & Quick Scenario Presets */}
-            <div className="w-full px-3 py-2 border-t border-white/5 flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 font-bold">PRESETS:</span>
+            <div className="w-full px-3 py-2 border-t border-white/10 flex flex-wrap items-center justify-between text-[11px] text-white/60 gap-2 font-mono">
+              <div className="flex items-center gap-1.5">
+                <span className="text-white/40 font-bold uppercase tracking-wider">PRESETS:</span>
                 <button
                   onClick={() => applyPresetActionRef.current?.('calm')}
-                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-emerald-500 text-slate-300 text-[10px]"
+                  className="px-2 py-0.5 rounded bg-white/10 border border-white/15 hover:border-emerald-400 text-white text-[10px]"
                 >
                   Calm Flow
                 </button>
                 <button
                   onClick={() => applyPresetActionRef.current?.('surge')}
-                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-red-500 text-slate-300 text-[10px]"
+                  className="px-2 py-0.5 rounded bg-white/10 border border-white/15 hover:border-red-400 text-white text-[10px]"
                 >
                   Bottleneck Rush
                 </button>
                 <button
                   onClick={() => applyPresetActionRef.current?.('pillar_test')}
-                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-300 text-[10px]"
+                  className="px-2 py-0.5 rounded bg-white/10 border border-white/15 hover:border-cyan-400 text-white text-[10px]"
                 >
                   Deflection Test
                 </button>
                 <button
                   onClick={() => applyPresetActionRef.current?.('panic')}
-                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-amber-400 text-slate-300 text-[10px]"
+                  className="px-2 py-0.5 rounded bg-white/10 border border-white/15 hover:border-amber-400 text-white text-[10px]"
                 >
                   Shockwave
                 </button>
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-slate-500">
-                  Left Barrier P1: <b className="text-slate-200">{barrierP1} kN</b>
+                <span>
+                  Left Wall P1: <b className="text-white">{barrierP1} kN</b>
                 </span>
-                <span className="text-slate-500">
-                  Right Barrier P2: <b className="text-slate-200">{barrierP2} kN</b>
+                <span>
+                  Right Wall P2: <b className="text-white">{barrierP2} kN</b>
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: DESKTOP CONTROL DECK & TILE SYSTEM HUD */}
+        {/* RIGHT: DESKTOP CONTROL DECK & TILE SYSTEM HUD (SWISS WHITE PANELS) */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           {/* 1. PEAK STRESS INDEX (OF SELECTED BOX ONLY) */}
-          <div className="glass-panel p-4 border border-white/10 relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs text-slate-400 tracking-wider uppercase mb-1">
-              <span className="flex items-center gap-1.5 font-bold text-cyan-300">
-                <Flame className="w-4 h-4 text-cyan-400" />
+          <div className="bg-white border border-black/15 shadow-sm rounded-xl p-4 relative overflow-hidden">
+            <div className="flex items-center justify-between text-xs text-[#111111]/60 tracking-wider uppercase mb-1">
+              <span className="flex items-center gap-1.5 font-bold text-[#111111]">
+                <Flame className="w-4 h-4 text-[#38BDF8]" />
                 Peak Stress &middot; Box {selectedSector}
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-400/40 text-cyan-300 font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-black/5 border border-black/10 text-[#111111] font-mono font-bold">
                 SELECTED BOX ONLY
               </span>
             </div>
 
             {/* Massive Metric Display for Selected Box */}
-            <div className="flex items-baseline gap-3 my-1">
+            <div className="flex items-baseline gap-2 my-1">
               <span
-                className="text-6xl font-black tracking-tight font-sans"
-                style={{
-                  color: selectedAlertColor,
-                  textShadow: `0 0 32px ${selectedAlertColor}80`,
-                }}
+                className="text-6xl font-black tracking-tight font-display text-[#111111]"
               >
                 {selectedSectorStress}
               </span>
-              <span className="text-sm font-mono text-slate-400">
+              <span className="text-sm font-mono text-[#111111]/50">
                 / 100.0
               </span>
             </div>
 
-            <div className="w-full bg-slate-900 h-2 rounded overflow-hidden border border-white/10 my-2">
+            <div className="w-full bg-[#F5F2EB] h-2.5 rounded-full overflow-hidden border border-black/10 my-2.5">
               <div
-                className="h-full transition-all duration-300"
+                className={`h-full transition-all duration-300 ${
+                  isSelectedCrit
+                    ? 'bg-[#EF4444]'
+                    : isSelectedWarn
+                    ? 'bg-[#F59E0B]'
+                    : 'bg-[#38BDF8]'
+                }`}
                 style={{
                   width: `${Math.min(100, selectedSectorStress)}%`,
-                  backgroundColor: selectedAlertColor,
-                  boxShadow: `0 0 12px ${selectedAlertColor}`,
                 }}
               />
             </div>
 
-            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono mt-1">
-              <span>Box Peak: <b className="text-slate-200">{selectedSectorPeakForce} N</b></span>
-              <span>In Box: <b className="text-cyan-300">{selectedSectorAgents} pax</b></span>
-              <span>Rib Lim: <b className="text-amber-400">2550 N</b></span>
-              <span>Ceiling: <b className="text-red-400">4800 N</b></span>
+            <div className="grid grid-cols-4 gap-1 text-[10px] text-[#111111]/70 font-mono mt-1 pt-2 border-t border-black/10 text-center">
+              <div>
+                <span className="text-[9px] uppercase text-[#111111]/50">Box Peak</span>
+                <div className="font-bold text-[#111111] mt-0.5">{selectedSectorPeakForce} N</div>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase text-[#111111]/50">In Box</span>
+                <div className="font-bold text-[#38BDF8] mt-0.5">{selectedSectorAgents} pax</div>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase text-[#111111]/50">Rib Lim</span>
+                <div className="font-bold text-[#F59E0B] mt-0.5">2550 N</div>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase text-[#111111]/50">Ceiling</span>
+                <div className="font-bold text-[#EF4444] mt-0.5">4800 N</div>
+              </div>
             </div>
           </div>
 
           {/* 2. VENUE SECTOR GRID (5x4 TILE SYSTEM) */}
-          <div className="glass-panel p-3 border border-white/10 flex flex-col gap-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/5 pb-1.5">
+          <div className="bg-white border border-black/15 shadow-sm rounded-xl p-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs font-bold text-[#111111] uppercase tracking-wider border-b border-black/10 pb-2">
               <span className="flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-cyan-400" />
-                Venue Sector Grid (A1...D5)
+                <Target className="w-3.5 h-3.5 text-[#38BDF8]" />
+                Venue Sector Grid (5&times;4)
               </span>
-              <span className="text-[10px] text-amber-400 font-bold">
-                PEAK: {hotspotSector}
+              <span className="text-[10px] text-[#F59E0B] font-bold">
+                HOTSPOT: {hotspotSector}
               </span>
             </div>
 
@@ -1508,47 +1558,45 @@ export default function SimulatorPage() {
               {sectorTiles.map((tile) => {
                 const isHot = tile.sector === hotspotSector;
                 const isSelected = tile.sector === selectedSector;
-                const statusColor =
-                  tile.status === 'CRITICAL'
-                    ? 'bg-red-950/80 border-red-500 text-red-300'
-                    : tile.status === 'WARNING'
-                    ? 'bg-amber-950/80 border-amber-500 text-amber-300'
-                    : 'bg-slate-900/80 border-slate-700/60 text-slate-300';
+                let statusColor = 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black';
+                if (tile.status === 'CRITICAL') {
+                  statusColor = 'bg-red-50 border-red-400 text-red-800';
+                } else if (tile.status === 'WARNING') {
+                  statusColor = 'bg-amber-50 border-amber-400 text-amber-900';
+                }
+
+                if (isSelected) {
+                  statusColor = 'bg-cyan-50 border-cyan-400 text-cyan-900 ring-2 ring-[#38BDF8] shadow-sm font-bold scale-105';
+                }
 
                 return (
                   <button
                     key={tile.sector}
                     onClick={() => setSelectedSector(tile.sector)}
-                    className={`p-1 rounded border text-center transition-all flex flex-col items-center justify-center ${statusColor} ${
-                      isHot ? 'ring-1 ring-amber-400 shadow-[0_0_8px_rgba(217,163,60,0.5)]' : ''
-                    } ${
-                      isSelected
-                        ? 'ring-2 ring-cyan-400 bg-cyan-950/80 text-cyan-200 shadow-[0_0_12px_rgba(56,189,248,0.6)] scale-105 font-bold'
-                        : 'hover:border-slate-500'
-                    }`}
+                    className={`p-1.5 rounded border text-center transition-all flex flex-col items-center justify-center ${statusColor}`}
                     title={`Click to show Peak Stress Index of Sector ${tile.sector}`}
                   >
                     <span className="text-[10px] font-bold font-mono">{tile.sector}</span>
-                    <span className="text-[9px] text-slate-400">{tile.agentCount}p</span>
+                    <span className="text-[9px] opacity-75">{tile.agentCount}p</span>
                   </button>
                 );
               })}
             </div>
 
             {/* Quick Filter Helpers */}
-            <div className="flex items-center justify-between text-[10px] text-slate-400 px-1 pt-1.5 border-t border-white/5">
-              <span>Focus: <b className="text-cyan-300 font-bold">Box {selectedSector}</b></span>
+            <div className="flex items-center justify-between text-[10px] text-[#111111]/60 px-1 pt-2 border-t border-black/10">
+              <span>Focus: <b className="text-[#111111] font-bold">Box {selectedSector}</b></span>
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setSelectedSector(hotspotSector)}
-                  className="px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300 hover:border-amber-400 text-[10px] transition"
+                  className="px-2 py-0.5 rounded bg-amber-50 border border-amber-400 text-amber-900 text-[10px] font-bold transition"
                   title="Jump to the highest pressure sector in the venue"
                 >
                   Hotspot ({hotspotSector})
                 </button>
                 <button
                   onClick={() => setSelectedSector('B3')}
-                  className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[10px] transition"
+                  className="px-2 py-0.5 rounded bg-black/5 border border-black/15 text-[#111111] hover:bg-black hover:text-white text-[10px] transition"
                   title="Reset focus to the gate chokepoint"
                 >
                   Gate (B3)
@@ -1558,10 +1606,10 @@ export default function SimulatorPage() {
           </div>
 
           {/* 3. REAL-TIME INTERACTIVE SLIDERS */}
-          <div className="glass-panel p-4 border border-white/10 flex flex-col gap-3.5">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/5 pb-2">
+          <div className="bg-white border border-black/15 shadow-sm rounded-xl p-4 flex flex-col gap-3.5">
+            <div className="flex items-center justify-between text-xs font-bold text-[#111111] uppercase tracking-wider border-b border-black/10 pb-2">
               <span className="flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                <Sliders className="w-3.5 h-3.5 text-[#38BDF8]" />
                 Physical Parameter Controls
               </span>
               <button
@@ -1570,7 +1618,7 @@ export default function SimulatorPage() {
                   setGateWidth(140);
                   setKineticDrive(1.1);
                 }}
-                className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
+                className="text-[10px] text-[#111111]/50 hover:text-black flex items-center gap-1 font-mono"
                 title="Reset sliders to nominal values"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -1580,9 +1628,9 @@ export default function SimulatorPage() {
 
             {/* Slider 1: Agent Spawn Rate */}
             <div className="flex flex-col gap-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 uppercase">Agent Spawn Rate</span>
-                <span className="font-mono text-cyan-400">{spawnRate.toFixed(1)} /s</span>
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-[#111111]/70 uppercase">Agent Spawn Rate</span>
+                <span className="font-bold text-[#38BDF8]">{spawnRate.toFixed(1)} /s</span>
               </div>
               <input
                 type="range"
@@ -1591,14 +1639,15 @@ export default function SimulatorPage() {
                 step="0.5"
                 value={spawnRate}
                 onChange={(e) => setSpawnRate(parseFloat(e.target.value))}
+                className="accent-[#111111] cursor-pointer"
               />
             </div>
 
             {/* Slider 2: Gate Width */}
             <div className="flex flex-col gap-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 uppercase">Gate Width</span>
-                <span className="font-mono text-cyan-400">{gateWidth} px</span>
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-[#111111]/70 uppercase">Gate Width</span>
+                <span className="font-bold text-[#38BDF8]">{gateWidth} px</span>
               </div>
               <input
                 type="range"
@@ -1607,14 +1656,15 @@ export default function SimulatorPage() {
                 step="5"
                 value={gateWidth}
                 onChange={(e) => setGateWidth(parseInt(e.target.value))}
+                className="accent-[#111111] cursor-pointer"
               />
             </div>
 
             {/* Slider 3: Kinetic Drive (Panic Multiplier) */}
             <div className="flex flex-col gap-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-300 uppercase">Kinetic Drive (Panic)</span>
-                <span className="font-mono text-red-400">{kineticDrive.toFixed(1)}x</span>
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-[#111111]/70 uppercase">Kinetic Drive (Panic)</span>
+                <span className="font-bold text-[#EF4444]">{kineticDrive.toFixed(1)}x</span>
               </div>
               <input
                 type="range"
@@ -1623,49 +1673,51 @@ export default function SimulatorPage() {
                 step="0.1"
                 value={kineticDrive}
                 onChange={(e) => setKineticDrive(parseFloat(e.target.value))}
+                className="accent-[#EF4444] cursor-pointer"
               />
             </div>
           </div>
 
           {/* 4. ROLLING 30-SECOND RECHARTS TIME-SERIES */}
-          <div className="glass-panel p-3 border border-white/10 flex flex-col">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+          <div className="bg-white border border-black/15 shadow-sm rounded-xl p-4 flex flex-col">
+            <div className="flex items-center justify-between text-xs font-bold text-[#111111] uppercase tracking-wider mb-2">
               <span className="flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                <Activity className="w-3.5 h-3.5 text-[#38BDF8]" />
                 Rolling 30s Stress &middot; Box {selectedSector}
               </span>
-              <span className="text-[10px] text-slate-500">THROUGHPUT: {throughputPerMin}/min</span>
+              <span className="text-[10px] text-[#111111]/50 font-mono">FLUX: {throughputPerMin}/min</span>
             </div>
 
-            <div className="w-full h-32 min-h-[120px]">
+            <div className="w-full h-28 min-h-[110px]">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartHistory} margin={{ top: 6, right: 8, left: -24, bottom: 0 }}>
                     <defs>
                       <linearGradient id="stressGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#D4513A" stopOpacity={0.85} />
-                        <stop offset="50%" stopColor="#D9A33C" stopOpacity={0.55} />
-                        <stop offset="100%" stopColor="#4FB3D9" stopOpacity={0.15} />
+                        <stop offset="0%" stopColor="#EF4444" stopOpacity={0.85} />
+                        <stop offset="50%" stopColor="#F59E0B" stopOpacity={0.55} />
+                        <stop offset="100%" stopColor="#38BDF8" stopOpacity={0.2} />
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="time" stroke="#41525F" fontSize={9} tickLine={false} />
-                    <YAxis domain={[0, 100]} stroke="#41525F" fontSize={9} tickLine={false} />
+                    <XAxis dataKey="time" stroke="#111111" opacity={0.4} fontSize={9} tickLine={false} />
+                    <YAxis domain={[0, 100]} stroke="#111111" opacity={0.4} fontSize={9} tickLine={false} />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: 'rgba(13, 17, 20, 0.95)',
-                        borderColor: 'rgba(255, 255, 255, 0.15)',
-                        borderRadius: 4,
+                        backgroundColor: '#111111',
+                        color: '#F5F2EB',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: 6,
                         fontSize: 11,
                         fontFamily: 'monospace',
                       }}
                     />
-                    <ReferenceLine y={85} stroke="#D4513A" strokeDasharray="3 3" label={{ value: 'CRIT 85', fill: '#D4513A', fontSize: 9 }} />
-                    <ReferenceLine y={60} stroke="#D9A33C" strokeDasharray="3 3" />
+                    <ReferenceLine y={85} stroke="#EF4444" strokeDasharray="3 3" label={{ value: 'CRIT 85', fill: '#EF4444', fontSize: 9 }} />
+                    <ReferenceLine y={60} stroke="#F59E0B" strokeDasharray="3 3" />
                     <Area
                       type="monotone"
                       dataKey="psi"
-                      stroke="#4FB3D9"
-                      strokeWidth={2}
+                      stroke="#111111"
+                      strokeWidth={1.8}
                       fillOpacity={1}
                       fill="url(#stressGradient)"
                       isAnimationActive={false}
@@ -1673,29 +1725,29 @@ export default function SimulatorPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-slate-600">
-                  Loading telemetry stream...
+                <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
+                  Loading stream...
                 </div>
               )}
             </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-1 text-center">
+            <div className="text-[9px] text-[#111111]/50 font-mono mt-1 text-center">
               Dashed red denotes 85 PSI (4080 N Critical). Rib fracture threshold is 2550 N.
             </div>
           </div>
 
           {/* 5. MICRO-METRICS (Actively Jittered) */}
-          <div className="glass-panel p-2.5 border border-white/10 grid grid-cols-3 gap-2 text-center">
-            <div className="p-1.5 rounded bg-black/40 border border-white/5">
-              <div className="text-[9px] text-slate-400 uppercase tracking-wider">Flow Divergence</div>
-              <div className="text-xs font-mono font-bold text-cyan-300 mt-0.5">{flowDivergence}</div>
+          <div className="bg-white border border-black/15 shadow-sm rounded-xl p-3 grid grid-cols-3 gap-2 text-center font-mono">
+            <div className="p-1.5 rounded bg-[#F5F2EB] border border-black/5">
+              <div className="text-[9px] text-[#111111]/50 uppercase tracking-wider">Divergence</div>
+              <div className="text-xs font-bold text-[#38BDF8] mt-0.5">{flowDivergence}</div>
             </div>
-            <div className="p-1.5 rounded bg-black/40 border border-white/5">
-              <div className="text-[9px] text-slate-400 uppercase tracking-wider">Hysteresis</div>
-              <div className="text-xs font-mono font-bold text-amber-300 mt-0.5">{hysteresisDebounce}</div>
+            <div className="p-1.5 rounded bg-[#F5F2EB] border border-black/5">
+              <div className="text-[9px] text-[#111111]/50 uppercase tracking-wider">Hysteresis</div>
+              <div className="text-xs font-bold text-[#F59E0B] mt-0.5">{hysteresisDebounce}</div>
             </div>
-            <div className="p-1.5 rounded bg-black/40 border border-white/5">
-              <div className="text-[9px] text-slate-400 uppercase tracking-wider">Density Matrix</div>
-              <div className="text-xs font-mono font-bold text-slate-200 mt-0.5">{frameDensityMatrix}</div>
+            <div className="p-1.5 rounded bg-[#F5F2EB] border border-black/5">
+              <div className="text-[9px] text-[#111111]/50 uppercase tracking-wider">Matrix</div>
+              <div className="text-xs font-bold text-[#111111] mt-0.5">{frameDensityMatrix}</div>
             </div>
           </div>
         </div>

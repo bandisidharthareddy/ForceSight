@@ -102,7 +102,7 @@ export default function ForceSightFlagshipPage() {
                 <ScrambleText text="PREDICTIVE PHYSICAL CROWD SIMULATION" />
               </div>
 
-              <h1 className="text-5xl sm:text-7xl xl:text-8xl font-black font-display tracking-tight text-[#111111] uppercase leading-[0.92] mb-6">
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl xl:text-8xl font-black font-display tracking-tight text-[#111111] uppercase leading-[0.96] mb-6">
                 Predictive <br />
                 <span className="italic font-serif font-normal text-[#111111]/80">Crowd</span> Stress <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#111111] via-[#38BDF8] to-[#EF4444]">
