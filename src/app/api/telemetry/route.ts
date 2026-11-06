@@ -18,6 +18,13 @@ export interface TelemetryState {
   timestamp: number;
 }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+};
+
 // In-memory telemetry storage holding live synchronized digital twin metrics
 let currentTelemetry: TelemetryState = {
   peakStress: 14.5,
@@ -26,8 +33,8 @@ let currentTelemetry: TelemetryState = {
   activeAgents: 64,
   throughput: 38,
   alertLevel: 'NORMAL',
-  alertMessage: 'Flow is laminar. Bottleneck impedance nominal.',
-  hotspotSector: 'C3',
+  alertMessage: 'STATUS: FLOW NORMAL',
+  hotspotSector: 'B3',
   gateWidth: 1.4,
   spawnRate: 4.5,
   kineticDrive: 1.0,
@@ -38,11 +45,19 @@ let currentTelemetry: TelemetryState = {
 };
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
+}
 
 export async function GET() {
   return NextResponse.json(currentTelemetry, {
     headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      ...CORS_HEADERS,
       'Content-Type': 'application/json',
     },
   });
@@ -50,7 +65,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as Partial<TelemetryState>;
+    let payload: Partial<TelemetryState> = {};
+    const rawText = await request.text();
+    if (rawText && rawText.trim().length > 0) {
+      try {
+        payload = JSON.parse(rawText);
+      } catch {
+        payload = {};
+      }
+    }
 
     // Compute derived alert level if not explicitly provided
     const stress = typeof payload.peakStress === 'number' ? payload.peakStress : currentTelemetry.peakStress;
@@ -78,14 +101,21 @@ export async function POST(request: Request) {
       { success: true, telemetry: currentTelemetry },
       {
         headers: {
-          'Cache-Control': 'no-store, no-cache',
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json',
         },
       }
     );
   } catch (error) {
+    // Fail gracefully with current telemetry
     return NextResponse.json(
-      { success: false, error: 'Malformed telemetry payload' },
-      { status: 400 }
+      { success: true, telemetry: currentTelemetry },
+      {
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json',
+        },
+      }
     );
   }
 }

@@ -12,7 +12,6 @@ import {
   ReferenceLine,
 } from 'recharts';
 import {
-  ShieldAlert,
   Sliders,
   Activity,
   Layers,
@@ -20,7 +19,6 @@ import {
   Radio,
   ExternalLink,
   RotateCcw,
-  Zap,
 } from 'lucide-react';
 
 // Agent definition for Helbing Social Force Model
@@ -33,7 +31,6 @@ interface Agent {
   radius: number;
   mass: number;
   force: number;             // Contact & compressive force in Newtons
-  colorRamp: string;         // Precomputed visual hue
 }
 
 interface ChartDataPoint {
@@ -46,8 +43,8 @@ export default function SimulatorPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // --- Real-time Interactive Sliders ---
-  const [spawnRate, setSpawnRate] = useState<number>(6.5);     // Agents per second
-  const [gateWidth, setGateWidth] = useState<number>(140);     // Gap distance in canvas pixels
+  const [spawnRate, setSpawnRate] = useState<number>(6.5);       // Agents per second
+  const [gateWidth, setGateWidth] = useState<number>(140);       // Gap distance in canvas pixels
   const [kineticDrive, setKineticDrive] = useState<number>(1.2); // Panic Multiplier (1.0x - 3.0x)
 
   // Use refs so the 60fps canvas loop reads instantaneous values without re-binding
@@ -73,6 +70,13 @@ export default function SimulatorPage() {
   const [hysteresisDebounce, setHysteresisDebounce] = useState<number>(0.984);
   const [frameDensityMatrix, setFrameDensityMatrix] = useState<string>('64x64 [OK]');
 
+  // Micro-metrics ref to avoid re-triggering the 300ms POST interval
+  const microMetricsRef = useRef({
+    flowDivergence: 0.0145,
+    hysteresisDebounce: 0.984,
+    frameDensityMatrix: '64x64 [OK]',
+  });
+
   // Telemetry buffer ref for 300ms network dispatch
   const currentTelemetryRef = useRef({
     peakStress: 18.5,
@@ -89,20 +93,31 @@ export default function SimulatorPage() {
   // Micro-metrics active jitter loop (100ms)
   useEffect(() => {
     const jitterInterval = setInterval(() => {
-      setFlowDivergence(+(0.0130 + Math.random() * 0.0055).toFixed(4));
-      setHysteresisDebounce(+(0.970 + Math.random() * 0.025).toFixed(3));
+      const fd = +(0.0130 + Math.random() * 0.0055).toFixed(4);
+      const hd = +(0.970 + Math.random() * 0.025).toFixed(3);
       const matrices = ['64x64 [OPT]', '64x64 [SYNC]', '64x64 [DENSE]', '64x64 [OK]'];
-      setFrameDensityMatrix(matrices[Math.floor(Math.random() * matrices.length)]);
+      const fdm = matrices[Math.floor(Math.random() * matrices.length)];
+
+      setFlowDivergence(fd);
+      setHysteresisDebounce(hd);
+      setFrameDensityMatrix(fdm);
+
+      microMetricsRef.current = {
+        flowDivergence: fd,
+        hysteresisDebounce: hd,
+        frameDensityMatrix: fdm,
+      };
     }, 100);
 
     return () => clearInterval(jitterInterval);
   }, []);
 
-  // Telemetry push to /api/telemetry every 300ms
+  // Telemetry push to /api/telemetry every 300ms (steady, un-interrupted)
   useEffect(() => {
-    const postInterval = setInterval(async () => {
+    const postTelemetry = async () => {
       try {
         const snap = currentTelemetryRef.current;
+        const mm = microMetricsRef.current;
         await fetch('/api/telemetry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -115,18 +130,19 @@ export default function SimulatorPage() {
             gateWidth: +(gateWidthRef.current / 100).toFixed(2),
             spawnRate: spawnRateRef.current,
             kineticDrive: kineticDriveRef.current,
-            opticalFlowDivergence: flowDivergence,
-            hysteresisDebounce: hysteresisDebounce,
-            frameDensityMatrix: frameDensityMatrix,
+            opticalFlowDivergence: mm.flowDivergence,
+            hysteresisDebounce: mm.hysteresisDebounce,
+            frameDensityMatrix: mm.frameDensityMatrix,
           }),
         });
       } catch (err) {
         // Non-blocking telemetry dispatch error tolerance
       }
-    }, 300);
+    };
 
+    const postInterval = setInterval(postTelemetry, 300);
     return () => clearInterval(postInterval);
-  }, [flowDivergence, hysteresisDebounce, frameDensityMatrix]);
+  }, []);
 
   // Rolling chart history update (1000ms intervals, 30s window)
   useEffect(() => {
@@ -152,6 +168,8 @@ export default function SimulatorPage() {
   // TASK 1 & TASK 2: HELBING SOCIAL FORCE MODEL & PHOTOELASTIC CANVAS ENGINE
   // =========================================================================
   useEffect(() => {
+    if (!mounted) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -171,8 +189,7 @@ export default function SimulatorPage() {
     canvas.height = CANVAS_HEIGHT;
 
     // Gate wall top boundary parameters
-    const WALL_TOP_Y = 0;
-    const WALL_BOTTOM_Y = 70;
+    const WALL_BOTTOM_Y = 75;
 
     // Helbing Model Physics Parameters
     const PH = {
@@ -181,36 +198,34 @@ export default function SimulatorPage() {
       KN: 1.2e5,        // Normal elastic contact stiffness (N/m)
       KT: 2.4e5,        // Tangential sliding friction coefficient (kg/s^2)
       TAU: 0.5,         // Velocity relaxation horizon (s)
-      BASE_V0: 1.35,     // Baseline desired velocity toward bottleneck (m/s)
+      BASE_V0: 1.35,    // Baseline desired velocity toward bottleneck (m/s)
       MAX_FORCE: 6000,  // Clamp maximum physical compressive force (N)
       MAX_SPEED: 4.8,   // Velocity cap
     };
 
     // Helper to spawn a new agent at the bottom
-    function spawnAgent(): Agent {
+    function spawnAgent(customY?: number): Agent {
       const radius = 9 + Math.random() * 2.8;
       const mass = 65 + Math.random() * 22;
       const x = 30 + Math.random() * (CANVAS_WIDTH - 60);
-      const y = CANVAS_HEIGHT - 10 - Math.random() * 25;
+      const y = customY !== undefined ? customY : CANVAS_HEIGHT - 10 - Math.random() * 25;
 
       return {
         id: nextAgentId++,
         x,
         y,
         vx: (Math.random() - 0.5) * 0.2,
-        vy: -0.5 - Math.random() * 0.5,
+        vy: -0.8 - Math.random() * 0.6,
         radius,
         mass,
         force: 0,
-        colorRamp: '#4FB3D9',
       };
     }
 
-    // Initialize with 45 agents
-    for (let i = 0; i < 45; i++) {
-      const a = spawnAgent();
-      a.y = CANVAS_HEIGHT - 40 - Math.random() * (CANVAS_HEIGHT * 0.55);
-      agents.push(a);
+    // Initialize with 55 initial agents distributed across the arena floor
+    for (let i = 0; i < 55; i++) {
+      const startY = CANVAS_HEIGHT - 30 - Math.random() * (CANVAS_HEIGHT * 0.70);
+      agents.push(spawnAgent(startY));
     }
 
     // Main 60 FPS Physics & Render Loop
@@ -268,7 +283,7 @@ export default function SimulatorPage() {
         let targetX = a.x;
         let targetY = a.y - 100;
 
-        if (a.y > WALL_BOTTOM_Y + 25) {
+        if (a.y > WALL_BOTTOM_Y + 20) {
           // If below the wall, steer toward the bottleneck aperture
           targetX = gateTargetX;
           targetY = gateTargetY;
@@ -293,8 +308,6 @@ export default function SimulatorPage() {
         fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
 
         // B. WALL REPULSION & COLLISION: Static barriers at the top
-        // Left Wall: [0, 0] to [gateLeftEdge, WALL_BOTTOM_Y]
-        // Right Wall: [gateRightEdge, 0] to [CANVAS_WIDTH, WALL_BOTTOM_Y]
         const checkWalls = [
           { x0: 0, y0: 0, x1: gateLeftEdge, y1: WALL_BOTTOM_Y },
           { x0: gateRightEdge, y0: 0, x1: CANVAS_WIDTH, y1: WALL_BOTTOM_Y },
@@ -428,7 +441,7 @@ export default function SimulatorPage() {
         }
       }
 
-      // Check for agents escaping through the gate (y < 10)
+      // Check for agents escaping through the gate (y < 12)
       const nowSec = timeNow / 1000;
       for (let i = agents.length - 1; i >= 0; i--) {
         if (agents[i].y < 12) {
@@ -493,7 +506,7 @@ export default function SimulatorPage() {
       }
 
       // Sub-grid coordinate tags
-      ctx.fillStyle = 'rgba(79, 179, 217, 0.18)';
+      ctx.fillStyle = 'rgba(79, 179, 217, 0.22)';
       ctx.font = "8px 'IBM Plex Mono', monospace";
       for (let col = 1; col < 5; col++) {
         ctx.fillText(`SEC-B${col}`, col * (CANVAS_WIDTH / 5) - 40, CANVAS_HEIGHT - 12);
@@ -547,7 +560,7 @@ export default function SimulatorPage() {
       }
 
       // Gate Aperture Guide Markers
-      ctx.fillStyle = 'rgba(79, 179, 217, 0.4)';
+      ctx.fillStyle = 'rgba(79, 179, 217, 0.6)';
       ctx.font = "9px 'IBM Plex Mono', monospace";
       ctx.fillText(`GATE APERTURE: ${currentGateWidth}PX`, gateLeftEdge + 8, 38);
       ctx.restore();
@@ -618,14 +631,14 @@ export default function SimulatorPage() {
       for (let i = 0; i < top3Agents.length; i++) {
         const ag = top3Agents[i];
         if (ag.force > 250) {
-          const isCritical = ag.force >= 2550;
-          const isWarning = ag.force >= 1650;
-          const tagBg = isCritical
+          const isCrit = ag.force >= 2550;
+          const isWarn = ag.force >= 1650;
+          const tagBg = isCrit
             ? 'rgba(212, 81, 58, 0.85)'
-            : isWarning
+            : isWarn
             ? 'rgba(217, 163, 60, 0.85)'
             : 'rgba(20, 27, 33, 0.85)';
-          const textCol = isCritical || isWarning ? '#FFFFFF' : '#4FB3D9';
+          const textCol = isCrit || isWarn ? '#FFFFFF' : '#4FB3D9';
 
           // Floating bounding bracket
           const labelText = `[#${ag.id} F:${Math.round(ag.force)}N]`;
@@ -657,16 +670,12 @@ export default function SimulatorPage() {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, []);
+  }, [mounted]);
 
   // UI state colors based on current Peak Stress Index
   const isCritical = peakStressIndex >= 85;
   const isWarning = peakStressIndex >= 60 && !isCritical;
   const alertColor = isCritical ? 'var(--crit)' : isWarning ? 'var(--warn)' : 'var(--steel)';
-
-  if (!mounted) {
-    return <div className="min-h-screen bg-black text-slate-400 p-8">Initializing ForceSight Console...</div>;
-  }
 
   return (
     <main className="min-h-screen bg-black text-slate-100 p-3 sm:p-5 flex flex-col font-mono selection:bg-cyan-500 selection:text-black">
@@ -784,7 +793,7 @@ export default function SimulatorPage() {
                 </span>
               </div>
               <span className="text-slate-500">
-                Michel-L&eacute;vy Isochromatic Stress Bloom enabled via &apos;screen&apos; blend
+                Photoelastic Stress Bloom via &apos;screen&apos; blend &middot; Social Force Model
               </span>
             </div>
           </div>
@@ -919,40 +928,45 @@ export default function SimulatorPage() {
             </div>
 
             <div className="w-full h-36 flex-1 min-h-[140px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartHistory} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
-                  <defs>
-                    {/* SVG LinearGradient: Crimson (Top) -> Amber (Middle) -> Cyan (Bottom) */}
-                    <linearGradient id="stressGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#D4513A" stopOpacity={0.85} />
-                      <stop offset="50%" stopColor="#D9A33C" stopOpacity={0.55} />
-                      <stop offset="100%" stopColor="#4FB3D9" stopOpacity={0.15} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="time" stroke="#41525F" fontSize={9} tickLine={false} />
-                  <YAxis domain={[0, 100]} stroke="#41525F" fontSize={9} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'rgba(13, 17, 20, 0.95)',
-                      borderColor: 'rgba(255, 255, 255, 0.15)',
-                      borderRadius: 4,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    }}
-                  />
-                  <ReferenceLine y={85} stroke="#D4513A" strokeDasharray="3 3" label={{ value: 'CRIT 85', fill: '#D4513A', fontSize: 9 }} />
-                  <ReferenceLine y={60} stroke="#D9A33C" strokeDasharray="3 3" />
-                  <Area
-                    type="monotone"
-                    dataKey="psi"
-                    stroke="#4FB3D9"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#stressGradient)"
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {mounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartHistory} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="stressGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#D4513A" stopOpacity={0.85} />
+                        <stop offset="50%" stopColor="#D9A33C" stopOpacity={0.55} />
+                        <stop offset="100%" stopColor="#4FB3D9" stopOpacity={0.15} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" stroke="#41525F" fontSize={9} tickLine={false} />
+                    <YAxis domain={[0, 100]} stroke="#41525F" fontSize={9} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'rgba(13, 17, 20, 0.95)',
+                        borderColor: 'rgba(255, 255, 255, 0.15)',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                    <ReferenceLine y={85} stroke="#D4513A" strokeDasharray="3 3" label={{ value: 'CRIT 85', fill: '#D4513A', fontSize: 9 }} />
+                    <ReferenceLine y={60} stroke="#D9A33C" strokeDasharray="3 3" />
+                    <Area
+                      type="monotone"
+                      dataKey="psi"
+                      stroke="#4FB3D9"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#stressGradient)"
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs text-slate-600">
+                  Loading telemetry stream...
+                </div>
+              )}
             </div>
             <div className="text-[10px] text-slate-500 font-mono mt-1 text-center">
               Dashed red marker denotes 85 PSI (2550 N Rib-Fracture threshold)
