@@ -425,8 +425,6 @@ export default function SimulatorPage() {
         // Gate geometry
         const gateLeftEdge = (CANVAS_WIDTH - currentGateWidth) / 2;
         const gateRightEdge = (CANVAS_WIDTH + currentGateWidth) / 2;
-        const gateTargetX = CANVAS_WIDTH / 2;
-        const gateTargetY = WALL_BOTTOM_Y + 12;
 
         // ---------------------------------------------------------------------
         // 2. HELBING SOCIAL FORCE COMPUTATION (CALIBRATED REALITY)
@@ -460,20 +458,15 @@ export default function SimulatorPage() {
 
           const currentAgentV0 = v0_desired_base * (1.0 + a.panic * 0.8);
 
-          // A. DRIVE FORCE: Propel toward gate target
-          let targetX = a.x;
-          let targetY = a.y - 100;
-
-          if (a.y > WALL_BOTTOM_Y + 20) {
-            targetX = gateTargetX;
-            targetY = gateTargetY;
-          } else if (a.x >= gateLeftEdge - 5 && a.x <= gateRightEdge + 5) {
-            targetX = a.x;
-            targetY = -80;
-          } else {
-            targetX = a.x < CANVAS_WIDTH / 2 ? gateLeftEdge + 15 : gateRightEdge - 15;
-            targetY = WALL_BOTTOM_Y + 8;
-          }
+          // A. DRIVE FORCE: Propel toward gate target with clamped aperture logic
+          // Clamping targetX to the open gate aperture ensures parallel forward movement (targetX = a.x)
+          // for all agents with direct line of sight to the gate. Only agents obstructed behind walls
+          // steer diagonally inward toward the gate edges.
+          const edgeBuffer = Math.min(a.radius + 2, (gateRightEdge - gateLeftEdge) * 0.45);
+          const gateTargetLeft = gateLeftEdge + edgeBuffer;
+          const gateTargetRight = gateRightEdge - edgeBuffer;
+          const targetX = Math.max(gateTargetLeft, Math.min(gateTargetRight, a.x));
+          const targetY = -40; // Top exit boundary
 
           const dxGoal = targetX - a.x;
           const dyGoal = targetY - a.y;
