@@ -81,7 +81,7 @@ export default function MobileGuardDashboard() {
   );
 
   const selectedStress = activeTile
-    ? +(Math.min(100, (activeTile.peakForce / 3000) * 100).toFixed(1))
+    ? +(Math.min(100, (activeTile.peakForce / 4800) * 100).toFixed(1))
     : (telemetry.selectedSector === selectedSector && telemetry.selectedSectorStress !== undefined
         ? +(telemetry.selectedSectorStress.toFixed(1))
         : +(telemetry.peakStress.toFixed(1)));

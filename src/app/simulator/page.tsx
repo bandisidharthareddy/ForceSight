@@ -271,14 +271,17 @@ export default function SimulatorPage() {
     const WALL_BOTTOM_Y = 75;
 
     // Helbing Model Physics Parameters (CALIBRATED TO REALISTIC FORCE SCALES)
+    const MAX_CALIBRATED_FORCE = 4800; // Calibrated 100% Peak Stress ceiling in Newtons
+    const RIB_FRACTURE_LIMIT = 2550;   // Biological rib-fracture threshold (Still 2014)
+
     const PH = {
       A: 180,           // Social psychological repulsion force (N)
       B: 0.18,          // Social interaction falloff distance
-      KN: 420,          // Normal elastic contact stiffness (N/px) - calibrated for realistic gradual force accumulation
-      KT: 85,           // Tangential sliding friction coefficient
+      KN: 320,          // Normal elastic contact stiffness (N/px)
+      KT: 75,           // Tangential sliding friction coefficient
       TAU: 0.55,        // Velocity relaxation horizon (s)
       BASE_V0: 1.25,    // Baseline desired velocity toward bottleneck (m/s)
-      MAX_FORCE: 3500,  // Clamp maximum physical compressive force (N)
+      MAX_FORCE: 5200,  // Clamp maximum physical compressive force (N)
       MAX_SPEED: 4.2,   // Velocity cap
     };
 
@@ -459,7 +462,10 @@ export default function SimulatorPage() {
           const a = agents[i];
           let fx = 0;
           let fy = 0;
-          let compressionForce = 0;
+          let crowdCompression = 0;
+          let wallPinningStress = 0;
+          let pillarPinningStress = 0;
+          let sideWallStress = 0;
 
           // Panic decay
           if (a.panic > 0) {
@@ -497,120 +503,7 @@ export default function SimulatorPage() {
           fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
           fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
 
-          // B. DEFLECTION PILLARS COLLISION
-          for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
-            const pil = pillars[pIdx];
-            const dxP = a.x - pil.x;
-            const dyP = a.y - pil.y;
-            const distP = Math.hypot(dxP, dyP) || 1;
-            const overlapP = a.radius + pil.radius - distP;
-
-            if (distP < a.radius + pil.radius + 18) {
-              const nxP = dxP / distP;
-              const nyP = dyP / distP;
-
-              // Proximity deflection
-              const fSocialP = PH.A * 1.5 * Math.exp(-Math.max(0, -overlapP) / 8);
-              fx += fSocialP * nxP;
-              fy += fSocialP * nyP;
-
-              if (overlapP > 0) {
-                const fcP = Math.min(overlapP * PH.KN, PH.MAX_FORCE);
-                fx += fcP * nxP;
-                fy += fcP * nyP;
-                compressionForce += fcP;
-                pil.stress += fcP;
-              }
-            }
-          }
-
-          // C. SOLID WALL REPULSION & COLLISION (SOLID RECTANGULAR SLABS)
-          // 1. Left Solid Barrier Wall: (-inf, gateLeftEdge] x (-inf, WALL_BOTTOM_Y]
-          {
-            const cx = Math.min(gateLeftEdge, a.x);
-            const cy = Math.min(WALL_BOTTOM_Y, a.y);
-            const dx = a.x - cx;
-            const dy = a.y - cy;
-            const dist = Math.hypot(dx, dy);
-
-            if (a.x < gateLeftEdge && a.y < WALL_BOTTOM_Y) {
-              // Deep inside slab
-              fy += 2200;
-              compressionForce += 1200;
-              barrierP1Accum += 1200;
-            } else if (dist < a.radius + 24) {
-              const nx = dist > 0.001 ? dx / dist : 0;
-              const ny = dist > 0.001 ? dy / dist : 1;
-              const overlap = a.radius - dist;
-
-              if (overlap > 0) {
-                const fWall = Math.min(overlap * (PH.KN * 2.8), PH.MAX_FORCE);
-                fx += fWall * nx;
-                fy += fWall * ny;
-                compressionForce += fWall;
-                barrierP1Accum += fWall;
-              } else {
-                const fSocial = (PH.A * 1.8) * Math.exp(-(dist - a.radius) / 6);
-                fx += fSocial * nx;
-                fy += fSocial * ny;
-              }
-
-              // Lateral sliding along bottom wall toward gate aperture
-              if (a.y >= WALL_BOTTOM_Y && a.x < gateLeftEdge) {
-                fx += 340;
-              }
-            }
-          }
-
-          // 2. Right Solid Barrier Wall: [gateRightEdge, +inf) x (-inf, WALL_BOTTOM_Y]
-          {
-            const cx = Math.max(gateRightEdge, a.x);
-            const cy = Math.min(WALL_BOTTOM_Y, a.y);
-            const dx = a.x - cx;
-            const dy = a.y - cy;
-            const dist = Math.hypot(dx, dy);
-
-            if (a.x > gateRightEdge && a.y < WALL_BOTTOM_Y) {
-              // Deep inside slab
-              fy += 2200;
-              compressionForce += 1200;
-              barrierP2Accum += 1200;
-            } else if (dist < a.radius + 24) {
-              const nx = dist > 0.001 ? dx / dist : 0;
-              const ny = dist > 0.001 ? dy / dist : 1;
-              const overlap = a.radius - dist;
-
-              if (overlap > 0) {
-                const fWall = Math.min(overlap * (PH.KN * 2.8), PH.MAX_FORCE);
-                fx += fWall * nx;
-                fy += fWall * ny;
-                compressionForce += fWall;
-                barrierP2Accum += fWall;
-              } else {
-                const fSocial = (PH.A * 1.8) * Math.exp(-(dist - a.radius) / 6);
-                fx += fSocial * nx;
-                fy += fSocial * ny;
-              }
-
-              // Lateral sliding along bottom wall toward gate aperture
-              if (a.y >= WALL_BOTTOM_Y && a.x > gateRightEdge) {
-                fx -= 340;
-              }
-            }
-          }
-
-          // Side room boundary walls
-          if (a.x < a.radius + 15) {
-            const overlap = a.radius + 15 - a.x;
-            fx += overlap * 450;
-            compressionForce += overlap * 80;
-          } else if (a.x > CANVAS_WIDTH - a.radius - 15) {
-            const overlap = a.x - (CANVAS_WIDTH - a.radius - 15);
-            fx -= overlap * 450;
-            compressionForce += overlap * 80;
-          }
-
-          // D. AGENT-TO-AGENT SOCIAL FORCE & CONTACT COMPRESSION
+          // B. AGENT-TO-AGENT SOCIAL FORCE & CONTACT COMPRESSION (Evaluated first to measure collective crowd pressure)
           const agCellX = Math.min(cols - 1, Math.max(0, Math.floor(a.x / cellSize)));
           const agCellY = Math.min(rows - 1, Math.max(0, Math.floor(a.y / cellSize)));
 
@@ -641,7 +534,7 @@ export default function SimulatorPage() {
                   fx += fSocial * nx;
                   fy += fSocial * ny;
 
-                  // Real physical contact compression
+                  // Real physical contact compression between human bodies
                   if (overlap > 0) {
                     const fc = Math.min(overlap * PH.KN, PH.MAX_FORCE);
                     fx += fc * nx;
@@ -655,15 +548,152 @@ export default function SimulatorPage() {
                     fx += ft * tx;
                     fy += ft * ty;
 
-                    compressionForce += fc;
+                    crowdCompression += fc;
                   }
                 }
               }
             }
           }
 
-          // Apply net force and clamp
-          a.force = Math.min(compressionForce, PH.MAX_FORCE);
+          // C. DEFLECTION PILLARS COLLISION
+          for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+            const pil = pillars[pIdx];
+            const dxP = a.x - pil.x;
+            const dyP = a.y - pil.y;
+            const distP = Math.hypot(dxP, dyP) || 1;
+            const overlapP = a.radius + pil.radius - distP;
+
+            if (distP < a.radius + pil.radius + 18) {
+              const nxP = dxP / distP;
+              const nyP = dyP / distP;
+
+              // Proximity deflection
+              const fSocialP = PH.A * 1.5 * Math.exp(-Math.max(0, -overlapP) / 8);
+              fx += fSocialP * nxP;
+              fy += fSocialP * nyP;
+
+              if (overlapP > 0) {
+                const fRepulse = Math.min(overlapP * 350, 1000);
+                fx += fRepulse * nxP;
+                fy += fRepulse * nyP;
+
+                // Load absorbed by the pillar structure
+                pil.stress += Math.min(overlapP * 150 + crowdCompression * 0.4, 3000);
+
+                // Compression on agent: High only if pushed by crowd into the pillar!
+                if (crowdCompression > 0) {
+                  pillarPinningStress += crowdCompression * 0.4 + Math.min(overlapP * 35, 90);
+                } else {
+                  pillarPinningStress += Math.min(overlapP * 15, 30);
+                }
+              }
+            }
+          }
+
+          // D. SOLID WALL REPULSION & COLLISION (SOLID RECTANGULAR SLABS)
+          // 1. Left Solid Barrier Wall: (-inf, gateLeftEdge] x (-inf, WALL_BOTTOM_Y]
+          {
+            const cx = Math.min(gateLeftEdge, a.x);
+            const cy = Math.min(WALL_BOTTOM_Y, a.y);
+            const dx = a.x - cx;
+            const dy = a.y - cy;
+            const dist = Math.hypot(dx, dy);
+
+            if (a.x < gateLeftEdge && a.y < WALL_BOTTOM_Y) {
+              // Deep inside slab fallback ejection
+              fy += 1200;
+              barrierP1Accum += 400;
+            } else if (dist < a.radius + 24) {
+              const nx = dist > 0.001 ? dx / dist : 0;
+              const ny = dist > 0.001 ? dy / dist : 1;
+              const overlap = a.radius - dist;
+
+              if (overlap > 0) {
+                const fWall = Math.min(overlap * 380, 1200);
+                fx += fWall * nx;
+                fy += fWall * ny;
+
+                // Barrier structural sensor load in Newtons
+                barrierP1Accum += Math.min(overlap * 200 + crowdCompression * 0.5, 2500);
+
+                // Internal bodily crush stress: High ONLY if crowd is actively crushing agent into wall!
+                // Isolated contact produces only gentle tactile contact (~15-35 N) and never spikes to 100%!
+                if (crowdCompression > 0) {
+                  wallPinningStress += crowdCompression * 0.75 + Math.min(overlap * 35, 90);
+                } else {
+                  wallPinningStress += Math.min(overlap * 18, 35);
+                }
+              } else {
+                const fSocial = (PH.A * 1.8) * Math.exp(-(dist - a.radius) / 6);
+                fx += fSocial * nx;
+                fy += fSocial * ny;
+              }
+
+              // Lateral sliding along bottom wall toward gate aperture
+              if (a.y >= WALL_BOTTOM_Y && a.x < gateLeftEdge) {
+                fx += 340;
+              }
+            }
+          }
+
+          // 2. Right Solid Barrier Wall: [gateRightEdge, +inf) x (-inf, WALL_BOTTOM_Y]
+          {
+            const cx = Math.max(gateRightEdge, a.x);
+            const cy = Math.min(WALL_BOTTOM_Y, a.y);
+            const dx = a.x - cx;
+            const dy = a.y - cy;
+            const dist = Math.hypot(dx, dy);
+
+            if (a.x > gateRightEdge && a.y < WALL_BOTTOM_Y) {
+              // Deep inside slab fallback ejection
+              fy += 1200;
+              barrierP2Accum += 400;
+            } else if (dist < a.radius + 24) {
+              const nx = dist > 0.001 ? dx / dist : 0;
+              const ny = dist > 0.001 ? dy / dist : 1;
+              const overlap = a.radius - dist;
+
+              if (overlap > 0) {
+                const fWall = Math.min(overlap * 380, 1200);
+                fx += fWall * nx;
+                fy += fWall * ny;
+
+                // Barrier structural sensor load in Newtons
+                barrierP2Accum += Math.min(overlap * 200 + crowdCompression * 0.5, 2500);
+
+                // Internal bodily crush stress: High ONLY if crowd is actively crushing agent into wall!
+                if (crowdCompression > 0) {
+                  wallPinningStress += crowdCompression * 0.75 + Math.min(overlap * 35, 90);
+                } else {
+                  wallPinningStress += Math.min(overlap * 18, 35);
+                }
+              } else {
+                const fSocial = (PH.A * 1.8) * Math.exp(-(dist - a.radius) / 6);
+                fx += fSocial * nx;
+                fy += fSocial * ny;
+              }
+
+              // Lateral sliding along bottom wall toward gate aperture
+              if (a.y >= WALL_BOTTOM_Y && a.x > gateRightEdge) {
+                fx -= 340;
+              }
+            }
+          }
+
+          // Side room boundary walls
+          if (a.x < a.radius + 15) {
+            const overlap = a.radius + 15 - a.x;
+            fx += overlap * 400;
+            sideWallStress += crowdCompression > 0 ? crowdCompression * 0.4 + overlap * 20 : Math.min(overlap * 15, 30);
+          } else if (a.x > CANVAS_WIDTH - a.radius - 15) {
+            const overlap = a.x - (CANVAS_WIDTH - a.radius - 15);
+            fx -= overlap * 400;
+            sideWallStress += crowdCompression > 0 ? crowdCompression * 0.4 + overlap * 20 : Math.min(overlap * 15, 30);
+          }
+
+          // Apply total compressive stress and clamp
+          const totalStress = crowdCompression + wallPinningStress + pillarPinningStress + sideWallStress;
+          a.force = Math.min(totalStress, PH.MAX_FORCE);
           a.vx += (fx / a.mass) * dt;
           a.vy += (fy / a.mass) * dt;
 
@@ -844,8 +874,8 @@ export default function SimulatorPage() {
             const maxF = sectorMaxForces[idx];
             const avgF = cnt > 0 ? sectorForceSums[idx] / cnt : 0;
 
-            // Pressure Score combining density and contact compressive force
-            const pressureRaw = (maxF / 2550) * 70 + (cnt * 2.5);
+            // Pressure Score combining density and contact compressive force calibrated to 4800 N ceiling
+            const pressureRaw = (maxF / MAX_CALIBRATED_FORCE) * 80 + Math.min(20, cnt * 1.5);
             const score = Math.min(100, Math.round(pressureRaw));
             const status: 'NORMAL' | 'WARNING' | 'CRITICAL' =
               score >= 80 ? 'CRITICAL' : score >= 50 ? 'WARNING' : 'NORMAL';
@@ -869,8 +899,8 @@ export default function SimulatorPage() {
         }
 
         // Calibrated 0-100 Peak Stress Index
-        // 2550 N is rib-fracture threshold => mapped to 85.0 on PSI scale
-        const normalizedPSI = Math.min(100, (globalMaxForce / 3000) * 100);
+        // 4800 N ceiling for 100% PSI; 2550 N rib-fracture threshold corresponds to ~53.1% PSI, warning at 60%, critical at 85%
+        const normalizedPSI = Math.min(100, (globalMaxForce / MAX_CALIBRATED_FORCE) * 100);
 
         // Extract isolated metrics for the selected box only
         const activeSelSector = selectedSectorRef.current || peakSectorName;
@@ -884,7 +914,7 @@ export default function SimulatorPage() {
           const sIdx = selRowIdx * 5 + selColIdx;
           selMaxF = sectorMaxForces[sIdx];
           selCnt = sectorCounts[sIdx];
-          selPSI = +(Math.min(100, (selMaxF / 3000) * 100).toFixed(1));
+          selPSI = +(Math.min(100, (selMaxF / MAX_CALIBRATED_FORCE) * 100).toFixed(1));
         }
 
         setSelectedSectorStress(selPSI);
@@ -1115,13 +1145,13 @@ export default function SimulatorPage() {
 
       for (let i = 0; i < agents.length; i++) {
         const a = agents[i];
-        const stressRatio = Math.min(1, a.force / 2550);
+        const stressRatio = Math.min(1, a.force / 4200);
 
         let fillColor = 'rgba(79, 179, 217, 0.85)'; // Normal: Cyan
         let shadowColor = 'rgba(79, 179, 217, 0.5)';
         let shadowRadius = 0;
 
-        if (stressRatio >= 0.85) {
+        if (stressRatio >= 0.80) {
           fillColor = 'rgba(212, 81, 58, 0.95)';    // Critical: Crimson
           shadowColor = '#D4513A';
           shadowRadius = 18;
@@ -1157,9 +1187,9 @@ export default function SimulatorPage() {
       ctx.font = "9px 'IBM Plex Mono', monospace";
       for (let i = 0; i < top3Agents.length; i++) {
         const ag = top3Agents[i];
-        if (ag.force > 250) {
-          const isCrit = ag.force >= 2550;
-          const isWarn = ag.force >= 1400;
+        if (ag.force > 150) {
+          const isCrit = ag.force >= 3600;
+          const isWarn = ag.force >= 2000;
           const tagBg = isCrit
             ? 'rgba(212, 81, 58, 0.85)'
             : isWarn
@@ -1453,10 +1483,11 @@ export default function SimulatorPage() {
               />
             </div>
 
-            <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono mt-1">
-              <span>Box Peak Force: <b className="text-slate-200">{selectedSectorPeakForce} N</b></span>
+            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono mt-1">
+              <span>Box Peak: <b className="text-slate-200">{selectedSectorPeakForce} N</b></span>
               <span>In Box: <b className="text-cyan-300">{selectedSectorAgents} pax</b></span>
-              <span>Fracture Lim: <b className="text-red-400">2550 N</b></span>
+              <span>Rib Lim: <b className="text-amber-400">2550 N</b></span>
+              <span>Ceiling: <b className="text-red-400">4800 N</b></span>
             </div>
           </div>
 
@@ -1648,7 +1679,7 @@ export default function SimulatorPage() {
               )}
             </div>
             <div className="text-[10px] text-slate-500 font-mono mt-1 text-center">
-              Dashed red marker denotes 85 PSI (2550 N Rib-Fracture threshold)
+              Dashed red denotes 85 PSI (4080 N Critical). Rib fracture threshold is 2550 N.
             </div>
           </div>
 
