@@ -26,8 +26,149 @@ import {
   Compass,
   Play,
   Pause,
+  Music,
+  Building2,
+  Train,
+  Zap,
+  Info,
+  Sparkles,
+  MapPin,
 } from 'lucide-react';
 import { SectorMetric } from '../api/telemetry/route';
+
+// Indoor Venue Types & Configurations
+type VenueType = 'concert' | 'nightclub' | 'metro' | 'warehouse';
+
+interface VenueConfig {
+  id: VenueType;
+  name: string;
+  shortName: string;
+  tagline: string;
+  category: string;
+  riskDescription: string;
+  defaultSpawnRate: number;
+  defaultGateWidth: number;
+  defaultKineticDrive: number;
+  pillars: { x: number; y: number; radius: number }[];
+  hotspotLabel: string;
+  sectorNames: Record<string, string>;
+}
+
+const INDOOR_VENUES: Record<VenueType, VenueConfig> = {
+  concert: {
+    id: 'concert',
+    name: 'Concert Arena & Stage Barricade',
+    shortName: 'Concert Arena',
+    tagline: 'Front-of-Stage Mosh Pit & D-Ring Barricades',
+    category: 'LIVE ARENA // 18,000 CAP',
+    riskDescription: 'Performer surge generates extreme forward compression against front-of-stage steel D-ring crash barriers.',
+    defaultSpawnRate: 7.2,
+    defaultGateWidth: 175,
+    defaultKineticDrive: 1.4,
+    pillars: [
+      { x: 480, y: 220, radius: 24 }, // Center pit surge breaker
+      { x: 480, y: 410, radius: 20 }, // Delay tower
+    ],
+    hotspotLabel: 'A3 FRONT BARRICADE',
+    sectorNames: {
+      A1: 'STAGE WEST WING',
+      A2: 'PIT BARRIER L',
+      A3: 'FRONT CRASH BARRICADE',
+      A4: 'PIT BARRIER R',
+      A5: 'STAGE EAST WING',
+      B2: 'MOSH PIT FLANK L',
+      B3: 'MOSHPIT EPICENTER',
+      B4: 'MOSH PIT FLANK R',
+      C3: 'MID-FLOOR PIT SURGE',
+      D3: 'REAR ARENA INGRESS',
+    },
+  },
+  nightclub: {
+    id: 'nightclub',
+    name: 'Nightclub Ingress & Turnstile',
+    shortName: 'Nightclub Ingress',
+    tagline: 'VIP Stanchion Maze & ID Bag-Check Chokepoint',
+    category: 'INDOOR CLUB // 2,500 CAP',
+    riskDescription: 'Massive queue funnels through zigzag tensile stanchions into a narrow single-lane 1-meter RFID turnstile.',
+    defaultSpawnRate: 4.8,
+    defaultGateWidth: 110,
+    defaultKineticDrive: 1.15,
+    pillars: [
+      { x: 330, y: 290, radius: 16 }, // Stanchion posts
+      { x: 630, y: 290, radius: 16 },
+      { x: 420, y: 175, radius: 15 },
+      { x: 540, y: 175, radius: 15 },
+    ],
+    hotspotLabel: 'B3 TURNSTILE CHUTE',
+    sectorNames: {
+      A1: 'VIP LOUNGE ENTRY',
+      A2: 'STANCHION FUNNEL L',
+      A3: 'RFID ID TURNSTILE',
+      A4: 'STANCHION FUNNEL R',
+      A5: 'SECURITY EXIT CHUTE',
+      B2: 'VIP BUFFER ZONE',
+      B3: 'BAG-CHECK CHOKEPOINT',
+      B4: 'SIDE QUEUE FLANK',
+      C3: 'TENSILE ROPE MAZE',
+      D3: 'OUTSIDE QUEUE LINE',
+    },
+  },
+  metro: {
+    id: 'metro',
+    name: 'Metro Concourse & Fare Gates',
+    shortName: 'Metro Concourse',
+    tagline: 'Post-Encore Subway Ingress & Support Columns',
+    category: 'TRANSIT TUNNEL // 30,000 CAP',
+    riskDescription: 'Encore egress wave surges into underground subway concourse; severe wake compression around structural concrete columns.',
+    defaultSpawnRate: 9.2,
+    defaultGateWidth: 235,
+    defaultKineticDrive: 1.75,
+    pillars: [
+      { x: 330, y: 240, radius: 32 }, // Heavy concrete column 1
+      { x: 630, y: 240, radius: 32 }, // Heavy concrete column 2
+    ],
+    hotspotLabel: 'A3 FARE GATES',
+    sectorNames: {
+      A1: 'PLATFORM 01 WEST',
+      A2: 'GATE BANK L',
+      A3: 'SUBWAY FARE GATES',
+      A4: 'GATE BANK R',
+      A5: 'PLATFORM 02 EAST',
+      B2: 'COLUMN C1 COMPRESSION',
+      B3: 'CENTRAL PASSAGEWAY',
+      B4: 'COLUMN C2 COMPRESSION',
+      C3: 'MID-CONCOURSE CONVERGENCE',
+      D3: 'ARENA EGRESS INFLOW',
+    },
+  },
+  warehouse: {
+    id: 'warehouse',
+    name: 'Warehouse Rave & Sound Tower',
+    shortName: 'Warehouse Rave',
+    tagline: 'Center FOH Audio Console & Dual Fire Exits',
+    category: 'INDUSTRIAL RAVE // 6,000 CAP',
+    riskDescription: 'Crowd splits around central FOH audio/lighting mixing tower; turbulent convergence toward dual emergency exit corridors.',
+    defaultSpawnRate: 7.0,
+    defaultGateWidth: 145,
+    defaultKineticDrive: 1.45,
+    pillars: [
+      { x: 480, y: 310, radius: 38 }, // Central FOH mixing booth
+    ],
+    hotspotLabel: 'B2 & B4 DUAL FLANKS',
+    sectorNames: {
+      A1: 'FIRE EXIT 01 [WEST]',
+      A2: 'EXIT 01 QUEUE CHUTE',
+      A3: 'CENTER STAGE DIVIDER',
+      A4: 'EXIT 02 QUEUE CHUTE',
+      A5: 'FIRE EXIT 02 [EAST]',
+      B2: 'FOH AUDIO LEFT FLANK',
+      B3: 'FOH AUDIO MIXING BOOTH',
+      B4: 'FOH AUDIO RIGHT FLANK',
+      C3: 'FOH REAR SHADOW ZONE',
+      D3: 'MAIN DANCEFLOOR REAR',
+    },
+  },
+};
 
 // Agent definition for Helbing Social Force Model
 interface Agent {
@@ -140,14 +281,22 @@ export default function SimulatorPage() {
     selectedSectorAgents: 0,
     barrierP1: 0.12,
     barrierP2: 0.15,
+    venue: 'concert',
+    venueName: INDOOR_VENUES.concert.name,
     sectorGrid: [] as SectorMetric[],
   });
+
+  // --- Indoor Space Venue Architecture State ---
+  const [selectedVenue, setSelectedVenue] = useState<VenueType>('concert');
+  const selectedVenueRef = useRef<VenueType>('concert');
+  useEffect(() => { selectedVenueRef.current = selectedVenue; }, [selectedVenue]);
 
   // Dynamic actions triggered from buttons
   const triggerIncidentActionRef = useRef<((x: number, y: number) => void) | null>(null);
   const addPillarActionRef = useRef<((x: number, y: number) => void) | null>(null);
   const clearPillarsActionRef = useRef<(() => void) | null>(null);
   const applyPresetActionRef = useRef<((name: string) => void) | null>(null);
+  const switchVenueActionRef = useRef<((venueId: VenueType) => void) | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -193,6 +342,8 @@ export default function SimulatorPage() {
             hotspotPressure: snap.hotspotPressure,
             selectedSector: snap.selectedSector,
             selectedSectorStress: snap.selectedSectorStress,
+            venue: selectedVenueRef.current,
+            venueName: INDOOR_VENUES[selectedVenueRef.current].name,
             gateWidth: +(gateWidthRef.current / 100).toFixed(2),
             spawnRate: spawnRateRef.current,
             kineticDrive: kineticDriveRef.current,
@@ -248,10 +399,14 @@ export default function SimulatorPage() {
     let nextAgentId = 1;
     let nextPillarId = 1;
     let agents: Agent[] = [];
-    let pillars: Pillar[] = [
-      // Default strategic deflection pillar placed 130px below the gate
-      { id: nextPillarId++, x: 480, y: 200, radius: 24, stress: 0 },
-    ];
+    const initialVenueCfg = INDOOR_VENUES[selectedVenueRef.current];
+    let pillars: Pillar[] = initialVenueCfg.pillars.map((p) => ({
+      id: nextPillarId++,
+      x: p.x,
+      y: p.y,
+      radius: p.radius,
+      stress: 0,
+    }));
     let shockwaves: IncidentShockwave[] = [];
     let escapedWindow: number[] = [];
     let spawnAccumulator = 0;
@@ -329,6 +484,28 @@ export default function SimulatorPage() {
         if (dist < 140) {
           a.panic = 1.0;
         }
+      }
+    };
+
+    switchVenueActionRef.current = (venueId: VenueType) => {
+      selectedVenueRef.current = venueId;
+      setSelectedVenue(venueId);
+      const vcfg = INDOOR_VENUES[venueId];
+      setSpawnRate(vcfg.defaultSpawnRate);
+      setGateWidth(vcfg.defaultGateWidth);
+      setKineticDrive(vcfg.defaultKineticDrive);
+      pillars = vcfg.pillars.map((p) => ({
+        id: nextPillarId++,
+        x: p.x,
+        y: p.y,
+        radius: p.radius,
+        stress: 0,
+      }));
+      shockwaves = [];
+      agents = [];
+      for (let i = 0; i < 65; i++) {
+        const startY = CANVAS_HEIGHT - 35 - Math.random() * (CANVAS_HEIGHT * 0.70);
+        agents.push(spawnAgent(startY));
       }
     };
 
@@ -935,6 +1112,8 @@ export default function SimulatorPage() {
           selectedSectorAgents: selCnt,
           barrierP1: p1_kN,
           barrierP2: p2_kN,
+          venue: selectedVenueRef.current,
+          venueName: INDOOR_VENUES[selectedVenueRef.current].name,
           sectorGrid: currentSectors,
         };
 
@@ -1041,7 +1220,248 @@ export default function SimulatorPage() {
       }
       ctx.restore();
 
-      // B. Static Wall Boundaries at Top (Solid Structural Photoelastic Barriers)
+      // B. Venue-Specific Architectural Blueprint & Stage Rendering
+      const venue = selectedVenueRef.current;
+
+      if (venue === 'concert') {
+        // --- CONCERT ARENA & HEADLINER MAIN STAGE ---
+        ctx.save();
+        ctx.fillStyle = '#121622';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_BOTTOM_Y - 14);
+
+        // Animated rhythmic stage spotlights
+        const spotAngle = Math.sin(timeNow * 0.002) * 70;
+        const gSpot1 = ctx.createRadialGradient(240 + spotAngle, 0, 10, 300, 160, 240);
+        gSpot1.addColorStop(0, 'rgba(56, 189, 248, 0.25)');
+        gSpot1.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.fillStyle = gSpot1;
+        ctx.beginPath();
+        ctx.moveTo(240 + spotAngle, 0);
+        ctx.lineTo(100, 280);
+        ctx.lineTo(460, 280);
+        ctx.closePath();
+        ctx.fill();
+
+        const gSpot2 = ctx.createRadialGradient(720 - spotAngle, 0, 10, 660, 160, 240);
+        gSpot2.addColorStop(0, 'rgba(168, 85, 247, 0.22)');
+        gSpot2.addColorStop(1, 'rgba(168, 85, 247, 0)');
+        ctx.fillStyle = gSpot2;
+        ctx.beginPath();
+        ctx.moveTo(720 - spotAngle, 0);
+        ctx.lineTo(500, 280);
+        ctx.lineTo(860, 280);
+        ctx.closePath();
+        ctx.fill();
+
+        // Main Stage Truss Deck Banner
+        ctx.fillStyle = '#1A2130';
+        ctx.fillRect(40, 6, CANVAS_WIDTH - 80, 34);
+        ctx.strokeStyle = '#38BDF8';
+        ctx.lineWidth = 1.4;
+        ctx.strokeRect(40, 6, CANVAS_WIDTH - 80, 34);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = "bold 11px 'Space Grotesk', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡ MAIN STAGE // HEADLINER LIVE PERFORMANCE [18,000 CAP] ⚡', CANVAS_WIDTH / 2, 22);
+        ctx.fillStyle = '#38BDF8';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText('AUDIO DECIBELS: 108 dB · SECURITY BUFFER TRENCH ACTIVE', CANVAS_WIDTH / 2, 33);
+        ctx.textAlign = 'left';
+
+        // Heavy steel front crash barricade line
+        ctx.fillStyle = '#1E2736';
+        ctx.fillRect(0, WALL_BOTTOM_Y - 14, gateLeftEdge, 14);
+        ctx.fillRect(gateRightEdge, WALL_BOTTOM_Y - 14, CANVAS_WIDTH - gateRightEdge, 14);
+
+        // Barricade hazard hatching
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = 1.4;
+        for (let x = 0; x < gateLeftEdge; x += 16) {
+          ctx.beginPath(); ctx.moveTo(x, WALL_BOTTOM_Y - 14); ctx.lineTo(x + 10, WALL_BOTTOM_Y); ctx.stroke();
+        }
+        for (let x = gateRightEdge; x < CANVAS_WIDTH; x += 16) {
+          ctx.beginPath(); ctx.moveTo(x, WALL_BOTTOM_Y - 14); ctx.lineTo(x + 10, WALL_BOTTOM_Y); ctx.stroke();
+        }
+
+        // Security pit labels
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText('[SECURITY PIT // 8 MARSHALS STATIONED]', 50, WALL_BOTTOM_Y - 18);
+        ctx.fillText('[RESTRICTED PIT PASS ONLY]', CANVAS_WIDTH - 220, WALL_BOTTOM_Y - 18);
+
+        // Mosh pit zone outline in Sector B3
+        const pitX = 2 * (CANVAS_WIDTH / 5) + 6;
+        const pitY = 1 * (CANVAS_HEIGHT / 4) + 6;
+        const pitW = (CANVAS_WIDTH / 5) - 12;
+        const pitH = (CANVAS_HEIGHT / 4) - 12;
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(pitX, pitY, pitW, pitH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+        ctx.fillText('MOSHPIT SURGE ZONE', pitX + 10, pitY + 18);
+        ctx.restore();
+      } else if (venue === 'nightclub') {
+        // --- NIGHTCLUB INGRESS & VIP STANCHION CORRIDOR ---
+        ctx.save();
+        ctx.fillStyle = '#0F0E17';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_BOTTOM_Y);
+
+        ctx.fillStyle = '#F59E0B';
+        ctx.font = "bold 11px 'Space Grotesk', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('🍸 OLYMPUS NIGHTCLUB // INGRESS FOYER [2,500 CAP]', CANVAS_WIDTH / 2, 22);
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.7)';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText('TENSILE QUEUE CHUTES · MANDATORY RFID & BAG CHECK SCANNER', CANVAS_WIDTH / 2, 33);
+        ctx.textAlign = 'left';
+
+        // VIP Lounge partition on left flank
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.08)';
+        ctx.fillRect(0, WALL_BOTTOM_Y, 190, CANVAS_HEIGHT - WALL_BOTTOM_Y);
+        ctx.strokeStyle = '#A855F7';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(0, WALL_BOTTOM_Y, 190, CANVAS_HEIGHT - WALL_BOTTOM_Y);
+
+        ctx.fillStyle = '#C084FC';
+        ctx.font = "bold 9px 'JetBrains Mono', monospace";
+        ctx.fillText('★ VIP LOUNGE & BOTTLE SERVICE', 14, WALL_BOTTOM_Y + 24);
+        ctx.fillStyle = 'rgba(192, 132, 252, 0.7)';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText('FAST-TRACK WRISTBAND ACCESS ONLY', 14, WALL_BOTTOM_Y + 38);
+
+        // Security Scanner Checkpoint before turnstile
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+        ctx.fillRect(gateLeftEdge - 24, WALL_BOTTOM_Y + 14, currentGateWidth + 48, 26);
+        ctx.strokeStyle = '#38BDF8';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(gateLeftEdge - 24, WALL_BOTTOM_Y + 14, currentGateWidth + 48, 26);
+        ctx.fillStyle = '#38BDF8';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('RFID SCANNER // BAG-CHECK & 21+ ID VERIFICATION', CANVAS_WIDTH / 2, WALL_BOTTOM_Y + 30);
+        ctx.textAlign = 'left';
+
+        // Velvet stanchion ropes
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(330, 290);
+        ctx.quadraticCurveTo(375, 240, 420, 175);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(630, 290);
+        ctx.quadraticCurveTo(585, 240, 540, 175);
+        ctx.stroke();
+        ctx.restore();
+      } else if (venue === 'metro') {
+        // --- METRO CONCOURSE & SUBWAY PLATFORM FARE GATES ---
+        ctx.save();
+        ctx.fillStyle = '#141A22';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_BOTTOM_Y);
+
+        ctx.fillStyle = '#10B981';
+        ctx.font = "bold 11px 'Space Grotesk', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('🚇 METRO TRANSIT CONCOURSE // SUBWAY PLATFORMS 1 & 2', CANVAS_WIDTH / 2, 22);
+        ctx.textAlign = 'left';
+
+        // Yellow tactile safety strip along platform gate
+        ctx.fillStyle = '#F59E0B';
+        ctx.fillRect(0, WALL_BOTTOM_Y - 8, CANVAS_WIDTH, 8);
+        ctx.fillStyle = '#000000';
+        ctx.font = "bold 7px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('CAUTION: PLATFORM EDGE · STAND BEHIND YELLOW LINE · MIND THE GAP', CANVAS_WIDTH / 2, WALL_BOTTOM_Y - 2);
+        ctx.textAlign = 'left';
+
+        // Automated Fare Gate turnstile stiles
+        const stileCount = 4;
+        const stileW = currentGateWidth / stileCount;
+        for (let g = 0; g < stileCount; g++) {
+          const gx = gateLeftEdge + g * stileW;
+          ctx.fillStyle = '#1E293B';
+          ctx.fillRect(gx + 2, 34, stileW - 4, 30);
+          ctx.strokeStyle = '#10B981';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(gx + 2, 34, stileW - 4, 30);
+          ctx.fillStyle = '#10B981';
+          ctx.font = "8px 'JetBrains Mono', monospace";
+          ctx.fillText(`▲ T${g + 1}`, gx + 5, 52);
+        }
+
+        // Directional pavement chevrons
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.45)';
+        ctx.font = "14px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('▲   ▲   ▲   ▲   ▲   ▲', CANVAS_WIDTH / 2, WALL_BOTTOM_Y + 45);
+        ctx.textAlign = 'left';
+        ctx.restore();
+      } else if (venue === 'warehouse') {
+        // --- WAREHOUSE RAVE & CENTRAL FOH MIXING BOOTH ---
+        ctx.save();
+        ctx.fillStyle = '#12171E';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_BOTTOM_Y);
+
+        // Dual Fire Exits:
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+        ctx.fillRect(30, 8, 175, 52);
+        ctx.strokeStyle = '#10B981';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(30, 8, 175, 52);
+        ctx.fillStyle = '#10B981';
+        ctx.font = "bold 9px 'JetBrains Mono', monospace";
+        ctx.fillText('🏃 FIRE EXIT 01 [WEST]', 42, 32);
+        ctx.font = "7px 'JetBrains Mono', monospace";
+        ctx.fillText('EMERGENCY PUSH BAR', 42, 46);
+
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+        ctx.fillRect(CANVAS_WIDTH - 205, 8, 175, 52);
+        ctx.strokeStyle = '#10B981';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(CANVAS_WIDTH - 205, 8, 175, 52);
+        ctx.fillStyle = '#10B981';
+        ctx.font = "bold 9px 'JetBrains Mono', monospace";
+        ctx.fillText('🏃 FIRE EXIT 02 [EAST]', CANVAS_WIDTH - 193, 32);
+        ctx.font = "7px 'JetBrains Mono', monospace";
+        ctx.fillText('EMERGENCY PUSH BAR', CANVAS_WIDTH - 193, 46);
+
+        ctx.fillStyle = '#EF4444';
+        ctx.font = "bold 11px 'Space Grotesk', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('⚡ WAREHOUSE ELECTRONIC RAVE // 6,000 CAP', CANVAS_WIDTH / 2, 24);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText('FOH SOUND CONSOLE RESTRICTED · DUAL PERIMETER EVACUATION', CANVAS_WIDTH / 2, 38);
+        ctx.textAlign = 'left';
+
+        // Central FOH Audio mixing booth in center
+        ctx.fillStyle = '#18202A';
+        ctx.fillRect(410, 270, 140, 80);
+        ctx.strokeStyle = '#EF4444';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(410, 270, 140, 80);
+
+        // Animated sound VU level meter equalizers
+        for (let eq = 0; eq < 8; eq++) {
+          const eqH = 8 + Math.sin(timeNow * 0.008 + eq) * 12 + Math.random() * 8;
+          ctx.fillStyle = eqH > 22 ? '#EF4444' : eqH > 14 ? '#F59E0B' : '#10B981';
+          ctx.fillRect(422 + eq * 14, 335 - eqH, 8, eqH);
+        }
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = "bold 8px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('FOH AUDIO & LIGHTING DESK', 480, 290);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.85)';
+        ctx.fillText('[RESTRICTED CREW ONLY]', 480, 302);
+        ctx.textAlign = 'left';
+        ctx.restore();
+      }
+
+      // Static Wall Boundaries at Top (Solid Structural Photoelastic Barriers)
       ctx.save();
       ctx.fillStyle = '#16202C';
       ctx.fillRect(0, 0, gateLeftEdge, WALL_BOTTOM_Y);
@@ -1089,14 +1509,23 @@ export default function SimulatorPage() {
       ctx.font = "9px 'JetBrains Mono', monospace";
       ctx.fillText(`GATE: ${currentGateWidth}PX [P1: ${(barrierP1Accum / 1000).toFixed(2)}kN | P2: ${(barrierP2Accum / 1000).toFixed(2)}kN]`, gateLeftEdge + 6, 22);
 
+      const egressLabel =
+        venue === 'concert'
+          ? '▲ ▲ ▲ PIT EVACUATION CHUTE ▲ ▲ ▲'
+          : venue === 'nightclub'
+          ? '▲ ▲ ▲ CLUB AIRLOCK & TURNSTILES ▲ ▲ ▲'
+          : venue === 'metro'
+          ? '▲ ▲ ▲ SUBWAY PLATFORM ACCESS ▲ ▲ ▲'
+          : '▲ ▲ ▲ DUAL FIRE EGRESS ▲ ▲ ▲';
+
       ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
       ctx.font = "9px 'JetBrains Mono', monospace";
       ctx.textAlign = 'center';
-      ctx.fillText('▲ ▲ ▲ EGRESS CORRIDOR ▲ ▲ ▲', CANVAS_WIDTH / 2, 46);
+      ctx.fillText(egressLabel, CANVAS_WIDTH / 2, 46);
       ctx.textAlign = 'left';
       ctx.restore();
 
-      // C. Deflection Pillars Rendering with Photoelastic Stress Rings
+      // C. Deflection Pillars Rendering with Photoelastic Stress Rings (Venue Themed)
       for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
         const pil = pillars[pIdx];
         const pStressU = Math.min(1, pil.stress / 2000);
@@ -1105,12 +1534,28 @@ export default function SimulatorPage() {
         ctx.beginPath();
         ctx.arc(pil.x, pil.y, pil.radius, 0, Math.PI * 2);
 
-        ctx.fillStyle = '#1E293B';
-        ctx.fill();
-
-        ctx.strokeStyle = pStressU > 0.6 ? '#EF4444' : pStressU > 0.25 ? '#F59E0B' : '#38BDF8';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+        // Venue-specific styling for pillars
+        if (venue === 'metro') {
+          // Reinforced concrete column
+          ctx.fillStyle = '#263342';
+          ctx.fill();
+          ctx.strokeStyle = pStressU > 0.6 ? '#EF4444' : '#F59E0B';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        } else if (venue === 'nightclub') {
+          // Chrome stanchion post
+          ctx.fillStyle = '#1F2937';
+          ctx.fill();
+          ctx.strokeStyle = pStressU > 0.5 ? '#EF4444' : '#F59E0B';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#1E293B';
+          ctx.fill();
+          ctx.strokeStyle = pStressU > 0.6 ? '#EF4444' : pStressU > 0.25 ? '#F59E0B' : '#38BDF8';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
 
         if (pStressU > 0.05) {
           ctx.beginPath();
@@ -1121,14 +1566,22 @@ export default function SimulatorPage() {
         }
 
         // Inner anchor core
-        ctx.fillStyle = '#38BDF8';
+        ctx.fillStyle = venue === 'nightclub' ? '#F59E0B' : '#38BDF8';
         ctx.beginPath();
         ctx.arc(pil.x, pil.y, pil.radius * 0.35, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = '#94A3B8';
         ctx.font = "8px 'JetBrains Mono', monospace";
-        ctx.fillText(`PILLAR`, pil.x - 14, pil.y + 3);
+        const pilLabel =
+          venue === 'metro'
+            ? `COL ${pIdx + 1}`
+            : venue === 'nightclub'
+            ? `POST`
+            : venue === 'warehouse'
+            ? `FOH`
+            : `PILLAR`;
+        ctx.fillText(pilLabel, pil.x - 14, pil.y + 3);
         ctx.restore();
       }
 
@@ -1269,26 +1722,26 @@ export default function SimulatorPage() {
       {/* =========================================================================
           TOP COMMAND BAR & DIGITAL TWIN HUD HEADER (SWISS EDITORIAL THEME)
          ========================================================================= */}
-      <header className="bg-white border border-black/15 shadow-sm px-4 sm:px-6 py-3 mb-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <header className="bg-white border border-black/15 shadow-sm px-5 sm:px-7 py-3.5 mb-3 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
           <Link
             href="/"
-            className="w-9 h-9 rounded-lg bg-[#111111] flex items-center justify-center text-[#38BDF8] shadow-sm hover:scale-105 transition-transform"
+            className="w-11 h-11 rounded-xl bg-[#111111] flex items-center justify-center text-[#38BDF8] shadow-md hover:scale-105 transition-transform shrink-0"
             title="Return to Flagship Showcase"
           >
-            <Radio className="w-5 h-5 animate-pulse" />
+            <Radio className="w-6 h-6 animate-pulse" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
-              <Link href="/" className="text-xl font-bold font-display tracking-tight text-[#111111] uppercase hover:text-black">
+            <div className="flex items-baseline gap-2.5">
+              <Link href="/" className="text-3xl sm:text-4xl lg:text-5xl font-black font-display tracking-tight text-[#111111] uppercase hover:text-black transition-colors">
                 ForceSight
               </Link>
-              <span className="text-[10px] tracking-widest px-2 py-0.5 rounded bg-black/5 border border-black/10 text-[#111111] font-mono font-bold">
-                TWIN SANDBOX v2.5
+              <span className="text-[10px] tracking-widest px-2.5 py-0.5 rounded-full bg-[#111111] text-[#38BDF8] font-mono font-bold uppercase hidden sm:inline">
+                INDOOR DIGITAL TWIN v2.5
               </span>
             </div>
-            <p className="text-[11px] text-[#111111]/60 font-mono tracking-wide">
-              5&times;4 Sector Grid &middot; Deflection Pillars &middot; Helbing Social Force Model
+            <p className="text-[11px] text-[#111111]/70 font-mono tracking-wide mt-0.5">
+              Proactive Crowd Stress Simulation &middot; Photoelastic Fringes &middot; Helbing Social-Force CV
             </p>
           </div>
         </div>
@@ -1344,6 +1797,83 @@ export default function SimulatorPage() {
           </button>
         </div>
       </header>
+
+      {/* =========================================================================
+          INDOOR VENUE REPLICAS SELECTOR DECK (CONCERTS, NIGHTCLUBS, TRANSIT, RAVES)
+         ========================================================================= */}
+      <section className="bg-white border border-black/15 shadow-sm px-4 sm:px-6 py-3 mb-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 font-mono">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#111111] uppercase tracking-wider mr-2">
+            <Compass className="w-4 h-4 text-[#38BDF8]" />
+            <span>INDOOR REPLICAS:</span>
+          </div>
+
+          {/* 1. Concert Arena */}
+          <button
+            onClick={() => switchVenueActionRef.current?.('concert')}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+              selectedVenue === 'concert'
+                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+            }`}
+          >
+            <Music className="w-3.5 h-3.5 text-[#38BDF8]" />
+            <span>Concert Arena</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Stage Pit</span>
+          </button>
+
+          {/* 2. Nightclub Ingress */}
+          <button
+            onClick={() => switchVenueActionRef.current?.('nightclub')}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+              selectedVenue === 'nightclub'
+                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-[#F59E0B]" />
+            <span>Nightclub Ingress</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">VIP Stanchions</span>
+          </button>
+
+          {/* 3. Metro Concourse */}
+          <button
+            onClick={() => switchVenueActionRef.current?.('metro')}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+              selectedVenue === 'metro'
+                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+            }`}
+          >
+            <Train className="w-3.5 h-3.5 text-[#10B981]" />
+            <span>Metro Concourse</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Fare Gates</span>
+          </button>
+
+          {/* 4. Warehouse Rave */}
+          <button
+            onClick={() => switchVenueActionRef.current?.('warehouse')}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+              selectedVenue === 'warehouse'
+                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5 text-[#EF4444]" />
+            <span>Warehouse Rave</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">FOH Console</span>
+          </button>
+        </div>
+
+        {/* Real-time Risk Profile Telemetry Indicator */}
+        <div className="text-xs text-[#111111]/70 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping" />
+          <span className="font-bold text-[#111111]">RISK:</span>
+          <span className="truncate max-w-sm text-[11px] text-[#111111]/80">
+            {INDOOR_VENUES[selectedVenue].riskDescription}
+          </span>
+        </div>
+      </section>
 
       {/* =========================================================================
           MAIN INTERFACE GRID: CANVAS SIMULATION & CONTROL DECK
@@ -1487,10 +2017,10 @@ export default function SimulatorPage() {
             <div className="flex items-center justify-between text-xs text-[#111111]/60 tracking-wider uppercase mb-1">
               <span className="flex items-center gap-1.5 font-bold text-[#111111]">
                 <Flame className="w-4 h-4 text-[#38BDF8]" />
-                Peak Stress &middot; Box {selectedSector}
+                {INDOOR_VENUES[selectedVenue].shortName} &middot; Box {selectedSector}
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-black/5 border border-black/10 text-[#111111] font-mono font-bold">
-                SELECTED BOX ONLY
+              <span className="text-[10px] px-2 py-0.5 rounded bg-black/5 border border-black/10 text-[#111111] font-mono font-bold truncate max-w-[160px]" title={INDOOR_VENUES[selectedVenue].sectorNames[selectedSector]}>
+                {INDOOR_VENUES[selectedVenue].sectorNames[selectedSector] || 'SELECTED BOX'}
               </span>
             </div>
 
@@ -1546,7 +2076,7 @@ export default function SimulatorPage() {
             <div className="flex items-center justify-between text-xs font-bold text-[#111111] uppercase tracking-wider border-b border-black/10 pb-2">
               <span className="flex items-center gap-1.5">
                 <Target className="w-3.5 h-3.5 text-[#38BDF8]" />
-                Venue Sector Grid (5&times;4)
+                {INDOOR_VENUES[selectedVenue].shortName} Grid (5&times;4)
               </span>
               <span className="text-[10px] text-[#F59E0B] font-bold">
                 HOTSPOT: {hotspotSector}

@@ -212,9 +212,9 @@ export default function MobileGuardDashboard() {
                 BOX {selectedSector}
               </span>
             </div>
-            <div className="text-[10px] text-[#111111]/60 flex items-center gap-1 font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-              <span>SYNC 300ms &middot; HOTSPOT: {telemetry.hotspotSector}</span>
+            <div className="text-[10px] text-[#111111]/70 flex items-center gap-1 font-mono truncate max-w-[210px]" title={telemetry.venueName || 'Concert Arena & Stage Barricade'}>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse shrink-0" />
+              <span className="truncate">{telemetry.venueName || 'Concert Arena & Stage Barricade'}</span>
             </div>
           </div>
         </div>

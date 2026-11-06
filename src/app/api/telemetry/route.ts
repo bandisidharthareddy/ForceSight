@@ -30,6 +30,8 @@ export interface TelemetryState {
   frameDensityMatrix: string;       // Micro-metric
   barrierP1: number;                // kN on Left Gate Barrier
   barrierP2: number;                // kN on Right Gate Barrier
+  venue?: string;                   // Indoor space replica id e.g. "concert"
+  venueName?: string;               // Display name e.g. "Concert Arena & Stage Barricade"
   sectorGrid: SectorMetric[];       // 20 sectors (5x4 tile system)
   timestamp: number;
 }
