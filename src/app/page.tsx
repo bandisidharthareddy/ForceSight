@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   MoveUpRight,
   Terminal,
+  Play,
 } from 'lucide-react';
 import SmoothScroll from '../components/SmoothScroll';
 import DualTierNav from '../components/DualTierNav';
@@ -120,11 +121,22 @@ export default function ForceSightFlagshipPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <MagneticButton>
                   <Link
+                    href="/demo"
+                    className="px-6 py-3.5 rounded-full bg-[#111111] text-[#F5F2EB] hover:bg-black font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg hover:shadow-2xl group"
+                  >
+                    <Play className="w-4 h-4 text-[#EF4444] group-hover:scale-110 transition-transform fill-current" />
+                    <span>Incident Demo Video</span>
+                    <ArrowUpRight className="w-4 h-4 ml-1" />
+                  </Link>
+                </MagneticButton>
+
+                <MagneticButton>
+                  <Link
                     href="/simulator"
-                    className="px-6 py-3.5 rounded-full bg-[#111111] text-[#F5F2EB] hover:bg-black font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-lg hover:shadow-2xl"
+                    className="px-6 py-3.5 rounded-full border border-black/20 bg-white hover:bg-black hover:text-white text-[#111111] font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm"
                   >
                     <Monitor className="w-4 h-4 text-[#38BDF8]" />
-                    <span>Launch Desktop Twin</span>
+                    <span>Desktop Simulator Twin</span>
                     <ArrowUpRight className="w-4 h-4 ml-1" />
                   </Link>
                 </MagneticButton>

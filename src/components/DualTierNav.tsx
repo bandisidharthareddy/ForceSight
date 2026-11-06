@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Shield, Radio, Terminal, Smartphone, Monitor, ChevronRight } from 'lucide-react';
+import { Shield, Radio, Terminal, Smartphone, Monitor, ChevronRight, Play } from 'lucide-react';
 import ScrambleText from './ScrambleText';
 import MagneticButton from './MagneticButton';
 
@@ -117,6 +117,17 @@ export default function DualTierNav() {
 
           {/* Dual Portal Direct Launch CTAs */}
           <div className="flex items-center gap-2">
+            <MagneticButton>
+              <Link
+                href="/demo"
+                className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 hover:border-red-400 text-[11px] font-mono text-white flex items-center gap-1.5 transition shadow-sm"
+                title="Watch incident demonstration video (fire outbreak & crowd surge)"
+              >
+                <Play className="w-3.5 h-3.5 text-[#EF4444]" />
+                <span className="hidden sm:inline">Incident Demo</span>
+              </Link>
+            </MagneticButton>
+
             <MagneticButton>
               <Link
                 href="/simulator"

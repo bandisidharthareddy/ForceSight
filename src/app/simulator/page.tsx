@@ -57,30 +57,34 @@ interface VenueConfig {
 const INDOOR_VENUES: Record<VenueType, VenueConfig> = {
   concert: {
     id: 'concert',
-    name: 'Concert Arena & Stage Barricade',
+    name: 'Concert Arena & North Exit Egress',
     shortName: 'Concert Arena',
-    tagline: 'Front-of-Stage Mosh Pit & D-Ring Barricades',
+    tagline: 'Stage ➔ North Vomitory Exit Rush',
     category: 'LIVE ARENA // 18,000 CAP',
-    riskDescription: 'Performer surge generates extreme forward compression against front-of-stage steel D-ring crash barriers.',
-    defaultSpawnRate: 7.2,
-    defaultGateWidth: 175,
-    defaultKineticDrive: 1.4,
+    riskDescription: 'Surging crowd rushes away from headliner stage toward narrow North Vomitory concourse exit gates.',
+    defaultSpawnRate: 6.5,
+    defaultGateWidth: 160,
+    defaultKineticDrive: 1.3,
     pillars: [
-      { x: 480, y: 220, radius: 24 }, // Center pit surge breaker
+      { x: 480, y: 220, radius: 24 }, // Center egress deflection bollard
       { x: 480, y: 410, radius: 20 }, // Delay tower
     ],
-    hotspotLabel: 'A3 FRONT BARRICADE',
+    hotspotLabel: 'A3 NORTH VOMITORY GATE',
     sectorNames: {
-      A1: 'STAGE WEST WING',
-      A2: 'PIT BARRIER L',
-      A3: 'FRONT CRASH BARRICADE',
-      A4: 'PIT BARRIER R',
-      A5: 'STAGE EAST WING',
-      B2: 'MOSH PIT FLANK L',
-      B3: 'MOSHPIT EPICENTER',
-      B4: 'MOSH PIT FLANK R',
-      C3: 'MID-FLOOR PIT SURGE',
-      D3: 'REAR ARENA INGRESS',
+      A1: 'NORTH CONCOURSE WING L',
+      A2: 'EXIT FUNNEL LEFT',
+      A3: 'NORTH VOMITORY GATE',
+      A4: 'EXIT FUNNEL RIGHT',
+      A5: 'NORTH CONCOURSE WING R',
+      B2: 'CHOKEPOINT FLANK L',
+      B3: 'VOMITORY APPROACH',
+      B4: 'CHOKEPOINT FLANK R',
+      C3: 'MID-ARENA MOSHPIT',
+      D1: 'STAGE WEST WING',
+      D2: 'STAGE SOUND TOWER L',
+      D3: 'HEADLINER STAGE DECK',
+      D4: 'STAGE SOUND TOWER R',
+      D5: 'STAGE EAST WING',
     },
   },
   nightclub: {
@@ -441,6 +445,57 @@ export default function SimulatorPage() {
       MAX_SPEED: 4.2,   // Velocity cap
     };
 
+    // -------------------------------------------------------------------------
+    // HIGH-PERFORMANCE PRE-RENDERED BLOOM SPRITES (60 FPS LOCKED ON LAPTOPS)
+    // Eliminates expensive runtime ctx.shadowBlur which dropped FPS to <10
+    // -------------------------------------------------------------------------
+    const SPRITE_SIZE = 44;
+    const halfSprite = SPRITE_SIZE / 2;
+
+    function createGlowSprite(coreR: number, coreG: number, coreB: number) {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = SPRITE_SIZE;
+      offCanvas.height = SPRITE_SIZE;
+      const offCtx = offCanvas.getContext('2d');
+      if (!offCtx) return offCanvas;
+
+      const grad = offCtx.createRadialGradient(halfSprite, halfSprite, 2, halfSprite, halfSprite, halfSprite);
+      grad.addColorStop(0, `rgba(${coreR}, ${coreG}, ${coreB}, 0.95)`);
+      grad.addColorStop(0.35, `rgba(${coreR}, ${coreG}, ${coreB}, 0.55)`);
+      grad.addColorStop(0.70, `rgba(${coreR}, ${coreG}, ${coreB}, 0.18)`);
+      grad.addColorStop(1, `rgba(${coreR}, ${coreG}, ${coreB}, 0.0)`);
+
+      offCtx.fillStyle = grad;
+      offCtx.beginPath();
+      offCtx.arc(halfSprite, halfSprite, halfSprite, 0, Math.PI * 2);
+      offCtx.fill();
+
+      // Sharp inner particle circle
+      offCtx.fillStyle = `rgb(${coreR}, ${coreG}, ${coreB})`;
+      offCtx.beginPath();
+      offCtx.arc(halfSprite, halfSprite, 8.5, 0, Math.PI * 2);
+      offCtx.fill();
+
+      // Bright white central highlight
+      offCtx.fillStyle = '#FFFFFF';
+      offCtx.beginPath();
+      offCtx.arc(halfSprite, halfSprite, 2.5, 0, Math.PI * 2);
+      offCtx.fill();
+
+      return offCanvas;
+    }
+
+    const spriteNormal = createGlowSprite(56, 189, 248);  // Cyan
+    const spriteWarning = createGlowSprite(245, 158, 11); // Amber
+    const spriteCritical = createGlowSprite(239, 68, 68); // Red
+
+    // Pre-allocated spatial binning grid (Zero GC thrashing / zero array re-allocations!)
+    const cellSize = 36;
+    const cols = Math.ceil(CANVAS_WIDTH / cellSize) + 1;
+    const rows = Math.ceil(CANVAS_HEIGHT / cellSize) + 1;
+    const totalCells = cols * rows;
+    const grid: number[][] = Array.from({ length: totalCells }, () => []);
+
     // Helper to spawn a new agent at the bottom
     function spawnAgent(customY?: number): Agent {
       const radius = 9.5 + Math.random() * 2.2;
@@ -461,9 +516,9 @@ export default function SimulatorPage() {
       };
     }
 
-    // Initialize with 65 initial agents distributed across the arena floor
-    for (let i = 0; i < 65; i++) {
-      const startY = CANVAS_HEIGHT - 35 - Math.random() * (CANVAS_HEIGHT * 0.70);
+    // Initialize with 50 initial agents distributed across arena floor
+    for (let i = 0; i < 50; i++) {
+      const startY = CANVAS_HEIGHT - 35 - Math.random() * (CANVAS_HEIGHT * 0.65);
       agents.push(spawnAgent(startY));
     }
 
@@ -503,8 +558,8 @@ export default function SimulatorPage() {
       }));
       shockwaves = [];
       agents = [];
-      for (let i = 0; i < 65; i++) {
-        const startY = CANVAS_HEIGHT - 35 - Math.random() * (CANVAS_HEIGHT * 0.70);
+      for (let i = 0; i < 50; i++) {
+        const startY = CANVAS_HEIGHT - 35 - Math.random() * (CANVAS_HEIGHT * 0.65);
         agents.push(spawnAgent(startY));
       }
     };
@@ -604,10 +659,10 @@ export default function SimulatorPage() {
         }
 
         // ---------------------------------------------------------------------
-        // 1. SPAWN LOGIC: Continuously spawn agents at bottom of canvas
+        // 1. SPAWN LOGIC: Continuously spawn agents near bottom
         // ---------------------------------------------------------------------
         spawnAccumulator += currentSpawnRate * dt;
-        while (spawnAccumulator >= 1 && agents.length < 240) {
+        while (spawnAccumulator >= 1 && agents.length < 130) {
           spawnAccumulator -= 1;
           agents.push(spawnAgent());
         }
@@ -618,15 +673,14 @@ export default function SimulatorPage() {
         const gateRightEdge = (CANVAS_WIDTH + currentGateWidth) / 2;
 
         // ---------------------------------------------------------------------
-        // 2. HELBING SOCIAL FORCE COMPUTATION (CALIBRATED REALITY)
+        // 2. HELBING SOCIAL FORCE COMPUTATION (ZERO-ALLOCATION FAST SPATIAL GRID)
         // ---------------------------------------------------------------------
         const v0_desired_base = PH.BASE_V0 * currentKineticMultiplier;
 
-        // Spatial binning grid
-        const cellSize = 32;
-        const cols = Math.ceil(CANVAS_WIDTH / cellSize) + 1;
-        const rows = Math.ceil(CANVAS_HEIGHT / cellSize) + 1;
-        const grid: number[][] = Array.from({ length: cols * rows }, () => []);
+        // Fast bucket reset without GC thrashing
+        for (let c = 0; c < totalCells; c++) {
+          grid[c].length = 0;
+        }
 
         for (let i = 0; i < agents.length; i++) {
           const ag = agents[i];
@@ -1224,52 +1278,85 @@ export default function SimulatorPage() {
       const venue = selectedVenueRef.current;
 
       if (venue === 'concert') {
-        // --- CONCERT ARENA & HEADLINER MAIN STAGE ---
+        // --- CONCERT ARENA & HEADLINER MAIN STAGE (AT BOTTOM) ---
+        // People rush AWAY from the stage toward the North Vomitory Exit (at top)!
         ctx.save();
-        ctx.fillStyle = '#121622';
-        ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_BOTTOM_Y - 14);
 
-        // Animated rhythmic stage spotlights
-        const spotAngle = Math.sin(timeNow * 0.002) * 70;
-        const gSpot1 = ctx.createRadialGradient(240 + spotAngle, 0, 10, 300, 160, 240);
-        gSpot1.addColorStop(0, 'rgba(56, 189, 248, 0.25)');
+        // 1. Bottom Headliner Concert Stage Platform
+        const stageH = 56;
+        const stageY = CANVAS_HEIGHT - stageH;
+
+        ctx.fillStyle = '#111622';
+        ctx.fillRect(40, stageY, CANVAS_WIDTH - 80, stageH);
+        ctx.strokeStyle = '#38BDF8';
+        ctx.lineWidth = 1.6;
+        ctx.strokeRect(40, stageY, CANVAS_WIDTH - 80, stageH);
+
+        // Stage Truss Lights shining UPWARD into crowd
+        const spotSweep = Math.sin(timeNow * 0.002) * 80;
+        const gSpot1 = ctx.createRadialGradient(280 + spotSweep, stageY, 8, 340, stageY - 200, 240);
+        gSpot1.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
         gSpot1.addColorStop(1, 'rgba(56, 189, 248, 0)');
         ctx.fillStyle = gSpot1;
         ctx.beginPath();
-        ctx.moveTo(240 + spotAngle, 0);
-        ctx.lineTo(100, 280);
-        ctx.lineTo(460, 280);
+        ctx.moveTo(280 + spotSweep, stageY);
+        ctx.lineTo(120, stageY - 220);
+        ctx.lineTo(480, stageY - 220);
         ctx.closePath();
         ctx.fill();
 
-        const gSpot2 = ctx.createRadialGradient(720 - spotAngle, 0, 10, 660, 160, 240);
-        gSpot2.addColorStop(0, 'rgba(168, 85, 247, 0.22)');
+        const gSpot2 = ctx.createRadialGradient(680 - spotSweep, stageY, 8, 620, stageY - 200, 240);
+        gSpot2.addColorStop(0, 'rgba(168, 85, 247, 0.20)');
         gSpot2.addColorStop(1, 'rgba(168, 85, 247, 0)');
         ctx.fillStyle = gSpot2;
         ctx.beginPath();
-        ctx.moveTo(720 - spotAngle, 0);
-        ctx.lineTo(500, 280);
-        ctx.lineTo(860, 280);
+        ctx.moveTo(680 - spotSweep, stageY);
+        ctx.lineTo(480, stageY - 220);
+        ctx.lineTo(840, stageY - 220);
         ctx.closePath();
         ctx.fill();
 
-        // Main Stage Truss Deck Banner
-        ctx.fillStyle = '#1A2130';
-        ctx.fillRect(40, 6, CANVAS_WIDTH - 80, 34);
-        ctx.strokeStyle = '#38BDF8';
-        ctx.lineWidth = 1.4;
-        ctx.strokeRect(40, 6, CANVAS_WIDTH - 80, 34);
+        // Speaker Stacks (Left & Right)
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(44, stageY + 6, 44, stageH - 12);
+        ctx.fillRect(CANVAS_WIDTH - 88, stageY + 6, 44, stageH - 12);
+        ctx.strokeStyle = '#64748B';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(44, stageY + 6, 44, stageH - 12);
+        ctx.strokeRect(CANVAS_WIDTH - 88, stageY + 6, 44, stageH - 12);
 
+        // Stage Banner
         ctx.fillStyle = '#FFFFFF';
         ctx.font = "bold 11px 'Space Grotesk', sans-serif";
         ctx.textAlign = 'center';
-        ctx.fillText('⚡ MAIN STAGE // HEADLINER LIVE PERFORMANCE [18,000 CAP] ⚡', CANVAS_WIDTH / 2, 22);
+        ctx.fillText('⚡ HEADLINER CONCERT STAGE // SOUND & PYRO RIG [18,000 CAP] ⚡', CANVAS_WIDTH / 2, stageY + 22);
         ctx.fillStyle = '#38BDF8';
         ctx.font = "8px 'JetBrains Mono', monospace";
-        ctx.fillText('AUDIO DECIBELS: 108 dB · SECURITY BUFFER TRENCH ACTIVE', CANVAS_WIDTH / 2, 33);
+        ctx.fillText('STAGE SOUND LEVEL: 108 dB · CROWD SURGES AWAY TOWARDS NORTH EXITS ▲', CANVAS_WIDTH / 2, stageY + 38);
         ctx.textAlign = 'left';
 
-        // Heavy steel front crash barricade line
+        // Front-of-Stage Barricade
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(40, stageY - 3);
+        ctx.lineTo(CANVAS_WIDTH - 40, stageY - 3);
+        ctx.stroke();
+
+        // Top North Vomitory Concourse Exit Gates
+        ctx.fillStyle = '#141B26';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, WALL_BOTTOM_Y - 14);
+
+        ctx.fillStyle = '#38BDF8';
+        ctx.font = "bold 11px 'Space Grotesk', sans-serif";
+        ctx.textAlign = 'center';
+        ctx.fillText('▲ NORTH VOMITORY EGRESS // STADIUM CONCOURSE CHOKEPOINT ▲', CANVAS_WIDTH / 2, 22);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = "8px 'JetBrains Mono', monospace";
+        ctx.fillText('MAIN EGRESS TUNNEL · CHOKEPOINT APERTURE', CANVAS_WIDTH / 2, 34);
+        ctx.textAlign = 'left';
+
+        // Heavy steel crash barrier line on top wall
         ctx.fillStyle = '#1E2736';
         ctx.fillRect(0, WALL_BOTTOM_Y - 14, gateLeftEdge, 14);
         ctx.fillRect(gateRightEdge, WALL_BOTTOM_Y - 14, CANVAS_WIDTH - gateRightEdge, 14);
@@ -1284,15 +1371,9 @@ export default function SimulatorPage() {
           ctx.beginPath(); ctx.moveTo(x, WALL_BOTTOM_Y - 14); ctx.lineTo(x + 10, WALL_BOTTOM_Y); ctx.stroke();
         }
 
-        // Security pit labels
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.85)';
-        ctx.font = "8px 'JetBrains Mono', monospace";
-        ctx.fillText('[SECURITY PIT // 8 MARSHALS STATIONED]', 50, WALL_BOTTOM_Y - 18);
-        ctx.fillText('[RESTRICTED PIT PASS ONLY]', CANVAS_WIDTH - 220, WALL_BOTTOM_Y - 18);
-
-        // Mosh pit zone outline in Sector B3
+        // Mosh pit zone outline in Sector C3
         const pitX = 2 * (CANVAS_WIDTH / 5) + 6;
-        const pitY = 1 * (CANVAS_HEIGHT / 4) + 6;
+        const pitY = 2 * (CANVAS_HEIGHT / 4) + 6;
         const pitW = (CANVAS_WIDTH / 5) - 12;
         const pitH = (CANVAS_HEIGHT / 4) - 12;
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
@@ -1300,7 +1381,7 @@ export default function SimulatorPage() {
         ctx.strokeRect(pitX, pitY, pitW, pitH);
         ctx.setLineDash([]);
         ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
-        ctx.fillText('MOSHPIT SURGE ZONE', pitX + 10, pitY + 18);
+        ctx.fillText('MID-ARENA MOSHPIT', pitX + 10, pitY + 18);
         ctx.restore();
       } else if (venue === 'nightclub') {
         // --- NIGHTCLUB INGRESS & VIP STANCHION CORRIDOR ---
@@ -1618,43 +1699,15 @@ export default function SimulatorPage() {
       }
       ctx.restore();
 
-      // F. Photoelastic Stress Bloom Particles (Screen Blend)
+      // F. Photoelastic Stress Bloom Particles (Ultra-Fast Blit - 60 FPS Locked)
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-
       for (let i = 0; i < agents.length; i++) {
         const a = agents[i];
         const stressRatio = Math.min(1, a.force / 4200);
-
-        let fillColor = 'rgba(56, 189, 248, 0.88)'; // Normal: Vivid Cyber Cyan
-        let shadowColor = '#38BDF8';
-        let shadowRadius = 4;
-
-        if (stressRatio >= 0.80) {
-          fillColor = 'rgba(239, 68, 68, 0.98)';     // Critical: Laser Crimson
-          shadowColor = '#EF4444';
-          shadowRadius = 18;
-        } else if (stressRatio >= 0.45) {
-          fillColor = 'rgba(245, 158, 11, 0.94)';    // Warning: Molten Amber
-          shadowColor = '#F59E0B';
-          shadowRadius = 14;
-        }
-
-        ctx.shadowBlur = shadowRadius;
-        ctx.shadowColor = shadowColor;
-        ctx.fillStyle = fillColor;
-
-        ctx.beginPath();
-        ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // High stress white core
-        if (stressRatio > 0.55) {
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.arc(a.x, a.y, a.radius * 0.35, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        const sprite =
+          stressRatio >= 0.80 ? spriteCritical : stressRatio >= 0.45 ? spriteWarning : spriteNormal;
+        ctx.drawImage(sprite, a.x - halfSprite, a.y - halfSprite);
       }
       ctx.restore();
 
@@ -1765,6 +1818,16 @@ export default function SimulatorPage() {
             {isCritical ? 'CRITICAL OVERLOAD' : isWarning ? 'WARNING: ELEVATED' : 'FLOW OPTIMAL'}
           </div>
 
+          {/* Incident Demo Video */}
+          <Link
+            href="/demo"
+            className="px-3.5 py-1.5 rounded-full bg-[#111111] text-[#F5F2EB] hover:bg-black hover:text-[#38BDF8] border border-black/15 transition flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase shadow-sm group"
+            title="Watch full simulated fire outbreak & crowd surge demonstration video"
+          >
+            <Play className="w-3.5 h-3.5 text-[#EF4444] group-hover:scale-110 transition-transform fill-current" />
+            <span className="font-bold">Incident Demo Video</span>
+          </Link>
+
           {/* Return to Showcase */}
           <Link
             href="/"
@@ -1803,7 +1866,7 @@ export default function SimulatorPage() {
          ========================================================================= */}
       <section className="bg-white border border-black/15 shadow-sm px-4 sm:px-6 py-3 mb-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 font-mono">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-[#111111] uppercase tracking-wider mr-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#111111] uppercase tracking-wider mr-1">
             <Compass className="w-4 h-4 text-[#38BDF8]" />
             <span>INDOOR REPLICAS:</span>
           </div>
@@ -1819,7 +1882,7 @@ export default function SimulatorPage() {
           >
             <Music className="w-3.5 h-3.5 text-[#38BDF8]" />
             <span>Concert Arena</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Stage Pit</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Stage ➔ North Exit</span>
           </button>
 
           {/* 2. Nightclub Ingress */}
@@ -1861,15 +1924,15 @@ export default function SimulatorPage() {
           >
             <Building2 className="w-3.5 h-3.5 text-[#EF4444]" />
             <span>Warehouse Rave</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">FOH Console</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Dual Fire Exits</span>
           </button>
         </div>
 
         {/* Real-time Risk Profile Telemetry Indicator */}
-        <div className="text-xs text-[#111111]/70 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping" />
-          <span className="font-bold text-[#111111]">RISK:</span>
-          <span className="truncate max-w-sm text-[11px] text-[#111111]/80">
+        <div className="text-xs text-[#111111]/70 flex items-center gap-2 min-w-0 flex-1 md:justify-end">
+          <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping shrink-0" />
+          <span className="font-bold text-[#111111] shrink-0">HAZARD:</span>
+          <span className="truncate text-[11px] text-[#111111]/85" title={INDOOR_VENUES[selectedVenue].riskDescription}>
             {INDOOR_VENUES[selectedVenue].riskDescription}
           </span>
         </div>
@@ -2113,24 +2176,34 @@ export default function SimulatorPage() {
               })}
             </div>
 
-            {/* Quick Filter Helpers */}
-            <div className="flex items-center justify-between text-[10px] text-[#111111]/60 px-1 pt-2 border-t border-black/10">
-              <span>Focus: <b className="text-[#111111] font-bold">Box {selectedSector}</b></span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setSelectedSector(hotspotSector)}
-                  className="px-2 py-0.5 rounded bg-amber-50 border border-amber-400 text-amber-900 text-[10px] font-bold transition"
-                  title="Jump to the highest pressure sector in the venue"
-                >
-                  Hotspot ({hotspotSector})
-                </button>
-                <button
-                  onClick={() => setSelectedSector('B3')}
-                  className="px-2 py-0.5 rounded bg-black/5 border border-black/15 text-[#111111] hover:bg-black hover:text-white text-[10px] transition"
-                  title="Reset focus to the gate chokepoint"
-                >
-                  Gate (B3)
-                </button>
+            {/* Quick Filter Helpers & Sector Label */}
+            <div className="flex flex-col gap-1.5 pt-2 border-t border-black/10 text-[10px] font-mono">
+              <div className="flex items-center justify-between text-[#111111]/70">
+                <span className="truncate max-w-[210px]" title={INDOOR_VENUES[selectedVenue].sectorNames[selectedSector]}>
+                  FOCUS: <b className="text-[#111111] font-bold">[{selectedSector}] {INDOOR_VENUES[selectedVenue].sectorNames[selectedSector] || 'GENERAL ARENA'}</b>
+                </span>
+                <span className="text-[9px] text-[#38BDF8] font-bold shrink-0">
+                  {selectedSectorStress} PSI
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[#111111]/60">
+                <span>Quick Filter:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setSelectedSector(hotspotSector)}
+                    className="px-2 py-0.5 rounded bg-amber-50 border border-amber-400 text-amber-900 text-[10px] font-bold transition"
+                    title="Jump to the highest pressure sector in the venue"
+                  >
+                    Hotspot ({hotspotSector})
+                  </button>
+                  <button
+                    onClick={() => setSelectedSector('B3')}
+                    className="px-2 py-0.5 rounded bg-black/5 border border-black/15 text-[#111111] hover:bg-black hover:text-white text-[10px] transition"
+                    title="Reset focus to the bottleneck aperture"
+                  >
+                    Aperture (B3)
+                  </button>
+                </div>
               </div>
             </div>
           </div>
