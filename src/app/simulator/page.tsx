@@ -19,7 +19,15 @@ import {
   Radio,
   ExternalLink,
   RotateCcw,
+  ShieldAlert,
+  Target,
+  PlusCircle,
+  Bomb,
+  Compass,
+  Play,
+  Pause,
 } from 'lucide-react';
+import { SectorMetric } from '../api/telemetry/route';
 
 // Agent definition for Helbing Social Force Model
 interface Agent {
@@ -31,6 +39,23 @@ interface Agent {
   radius: number;
   mass: number;
   force: number;             // Contact & compressive force in Newtons
+  panic: number;             // 0.0 (calm) to 1.0 (panicked)
+}
+
+interface Pillar {
+  id: number;
+  x: number;
+  y: number;
+  radius: number;
+  stress: number;            // Absorbed compressive load in Newtons
+}
+
+interface IncidentShockwave {
+  id: number;
+  x: number;
+  y: number;
+  radius: number;
+  life: number;              // Remaining duration in seconds
 }
 
 interface ChartDataPoint {
@@ -39,13 +64,15 @@ interface ChartDataPoint {
   rawForce: number;
 }
 
+const SECTOR_ROWS = ['A', 'B', 'C', 'D'];
+
 export default function SimulatorPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // --- Real-time Interactive Sliders ---
-  const [spawnRate, setSpawnRate] = useState<number>(6.5);       // Agents per second
+  const [spawnRate, setSpawnRate] = useState<number>(5.5);       // Agents per second
   const [gateWidth, setGateWidth] = useState<number>(140);       // Gap distance in canvas pixels
-  const [kineticDrive, setKineticDrive] = useState<number>(1.2); // Panic Multiplier (1.0x - 3.0x)
+  const [kineticDrive, setKineticDrive] = useState<number>(1.1); // Panic Multiplier (1.0x - 3.0x)
 
   // Use refs so the 60fps canvas loop reads instantaneous values without re-binding
   const spawnRateRef = useRef(spawnRate);
@@ -56,12 +83,30 @@ export default function SimulatorPage() {
   useEffect(() => { gateWidthRef.current = gateWidth; }, [gateWidth]);
   useEffect(() => { kineticDriveRef.current = kineticDrive; }, [kineticDrive]);
 
+  // --- Canvas Interaction Tools ---
+  type ToolMode = 'inspect' | 'pillar' | 'incident';
+  const [activeTool, setActiveTool] = useState<ToolMode>('pillar');
+  const activeToolRef = useRef<ToolMode>(activeTool);
+  useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
+
   // --- UI & Telemetry State ---
   const [is3DView, setIs3DView] = useState<boolean>(false);
-  const [peakStressIndex, setPeakStressIndex] = useState<number>(18.5);
-  const [rawPeakForce, setRawPeakForce] = useState<number>(550);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const isPausedRef = useRef(isPaused);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+
+  const [peakStressIndex, setPeakStressIndex] = useState<number>(14.5);
+  const [rawPeakForce, setRawPeakForce] = useState<number>(440);
   const [activePopulation, setActivePopulation] = useState<number>(0);
   const [throughputPerMin, setThroughputPerMin] = useState<number>(0);
+  const [hotspotSector, setHotspotSector] = useState<string>('B3');
+  const [barrierP1, setBarrierP1] = useState<number>(0.12);
+  const [barrierP2, setBarrierP2] = useState<number>(0.15);
+  const [sectorTiles, setSectorTiles] = useState<SectorMetric[]>([]);
+  const [selectedSector, setSelectedSector] = useState<string | null>(null);
+  const selectedSectorRef = useRef<string | null>(null);
+  useEffect(() => { selectedSectorRef.current = selectedSector; }, [selectedSector]);
+
   const [chartHistory, setChartHistory] = useState<ChartDataPoint[]>([]);
   const [mounted, setMounted] = useState<boolean>(false);
 
@@ -79,12 +124,22 @@ export default function SimulatorPage() {
 
   // Telemetry buffer ref for 300ms network dispatch
   const currentTelemetryRef = useRef({
-    peakStress: 18.5,
-    rawPeakForce: 550,
+    peakStress: 14.5,
+    rawPeakForce: 440,
     activeAgents: 0,
     throughput: 0,
     hotspotSector: 'B3',
+    hotspotPressure: 15,
+    barrierP1: 0.12,
+    barrierP2: 0.15,
+    sectorGrid: [] as SectorMetric[],
   });
+
+  // Dynamic actions triggered from buttons
+  const triggerIncidentActionRef = useRef<((x: number, y: number) => void) | null>(null);
+  const addPillarActionRef = useRef<((x: number, y: number) => void) | null>(null);
+  const clearPillarsActionRef = useRef<(() => void) | null>(null);
+  const applyPresetActionRef = useRef<((name: string) => void) | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -127,12 +182,16 @@ export default function SimulatorPage() {
             activeAgents: snap.activeAgents,
             throughput: snap.throughput,
             hotspotSector: snap.hotspotSector,
+            hotspotPressure: snap.hotspotPressure,
             gateWidth: +(gateWidthRef.current / 100).toFixed(2),
             spawnRate: spawnRateRef.current,
             kineticDrive: kineticDriveRef.current,
             opticalFlowDivergence: mm.flowDivergence,
             hysteresisDebounce: mm.hysteresisDebounce,
             frameDensityMatrix: mm.frameDensityMatrix,
+            barrierP1: snap.barrierP1,
+            barrierP2: snap.barrierP2,
+            sectorGrid: snap.sectorGrid,
           }),
         });
       } catch (err) {
@@ -165,7 +224,7 @@ export default function SimulatorPage() {
   }, []);
 
   // =========================================================================
-  // TASK 1 & TASK 2: HELBING SOCIAL FORCE MODEL & PHOTOELASTIC CANVAS ENGINE
+  // TASK 1, 2, 3: CALIBRATED CROWD PHYSICS, TILE SYSTEM & CANVAS ENGINE
   // =========================================================================
   useEffect(() => {
     if (!mounted) return;
@@ -177,10 +236,20 @@ export default function SimulatorPage() {
 
     let animationFrameId: number;
     let nextAgentId = 1;
+    let nextPillarId = 1;
     let agents: Agent[] = [];
+    let pillars: Pillar[] = [
+      // Default strategic deflection pillar placed 130px below the gate
+      { id: nextPillarId++, x: 480, y: 200, radius: 24, stress: 0 },
+    ];
+    let shockwaves: IncidentShockwave[] = [];
     let escapedWindow: number[] = [];
     let spawnAccumulator = 0;
     let lastTime = performance.now();
+
+    // Barrier panels accumulated force in Newtons
+    let barrierP1Accum = 0;
+    let barrierP2Accum = 0;
 
     // Canvas resolution setup
     const CANVAS_WIDTH = 960;
@@ -191,22 +260,22 @@ export default function SimulatorPage() {
     // Gate wall top boundary parameters
     const WALL_BOTTOM_Y = 75;
 
-    // Helbing Model Physics Parameters
+    // Helbing Model Physics Parameters (CALIBRATED TO REALISTIC FORCE SCALES)
     const PH = {
-      A: 2100,          // Social force strength (N)
-      B: 0.12,          // Social interaction falloff distance
-      KN: 1.2e5,        // Normal elastic contact stiffness (N/m)
-      KT: 2.4e5,        // Tangential sliding friction coefficient (kg/s^2)
-      TAU: 0.5,         // Velocity relaxation horizon (s)
-      BASE_V0: 1.35,    // Baseline desired velocity toward bottleneck (m/s)
-      MAX_FORCE: 6000,  // Clamp maximum physical compressive force (N)
-      MAX_SPEED: 4.8,   // Velocity cap
+      A: 180,           // Social psychological repulsion force (N)
+      B: 0.18,          // Social interaction falloff distance
+      KN: 420,          // Normal elastic contact stiffness (N/px) - calibrated for realistic gradual force accumulation
+      KT: 85,           // Tangential sliding friction coefficient
+      TAU: 0.55,        // Velocity relaxation horizon (s)
+      BASE_V0: 1.25,    // Baseline desired velocity toward bottleneck (m/s)
+      MAX_FORCE: 3500,  // Clamp maximum physical compressive force (N)
+      MAX_SPEED: 4.2,   // Velocity cap
     };
 
     // Helper to spawn a new agent at the bottom
     function spawnAgent(customY?: number): Agent {
-      const radius = 9 + Math.random() * 2.8;
-      const mass = 65 + Math.random() * 22;
+      const radius = 9.5 + Math.random() * 2.2;
+      const mass = 65 + Math.random() * 20;
       const x = 30 + Math.random() * (CANVAS_WIDTH - 60);
       const y = customY !== undefined ? customY : CANVAS_HEIGHT - 10 - Math.random() * 25;
 
@@ -215,18 +284,97 @@ export default function SimulatorPage() {
         x,
         y,
         vx: (Math.random() - 0.5) * 0.2,
-        vy: -0.8 - Math.random() * 0.6,
+        vy: -0.6 - Math.random() * 0.5,
         radius,
         mass,
         force: 0,
+        panic: 0,
       };
     }
 
-    // Initialize with 55 initial agents distributed across the arena floor
-    for (let i = 0; i < 55; i++) {
-      const startY = CANVAS_HEIGHT - 30 - Math.random() * (CANVAS_HEIGHT * 0.70);
+    // Initialize with 65 initial agents distributed across the arena floor
+    for (let i = 0; i < 65; i++) {
+      const startY = CANVAS_HEIGHT - 35 - Math.random() * (CANVAS_HEIGHT * 0.70);
       agents.push(spawnAgent(startY));
     }
+
+    // Expose interactive actions
+    addPillarActionRef.current = (x: number, y: number) => {
+      pillars.push({ id: nextPillarId++, x, y, radius: 22, stress: 0 });
+    };
+
+    clearPillarsActionRef.current = () => {
+      pillars = [];
+    };
+
+    triggerIncidentActionRef.current = (x: number, y: number) => {
+      shockwaves.push({ id: Date.now(), x, y, radius: 10, life: 3.5 });
+      // Instantly impart panic to nearby agents
+      for (const a of agents) {
+        const dist = Math.hypot(a.x - x, a.y - y);
+        if (dist < 140) {
+          a.panic = 1.0;
+        }
+      }
+    };
+
+    applyPresetActionRef.current = (name: string) => {
+      if (name === 'calm') {
+        setSpawnRate(3.5);
+        setGateWidth(200);
+        setKineticDrive(1.0);
+        pillars = [];
+        agents.forEach((a) => { a.panic = 0; });
+      } else if (name === 'surge') {
+        setSpawnRate(9.0);
+        setGateWidth(90);
+        setKineticDrive(2.2);
+        pillars = [];
+        agents.forEach((a) => { a.panic = 0.8; });
+      } else if (name === 'pillar_test') {
+        setSpawnRate(7.5);
+        setGateWidth(120);
+        setKineticDrive(1.5);
+        pillars = [{ id: nextPillarId++, x: 480, y: 200, radius: 26, stress: 0 }];
+      } else if (name === 'panic') {
+        triggerIncidentActionRef.current?.(480, 340);
+        setKineticDrive(2.5);
+      }
+    };
+
+    // Canvas click interaction handler
+    const handleCanvasClick = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = CANVAS_WIDTH / rect.width;
+      const scaleY = CANVAS_HEIGHT / rect.height;
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      const tool = activeToolRef.current;
+
+      if (tool === 'inspect') {
+        const col = Math.min(4, Math.max(0, Math.floor(clickX / (CANVAS_WIDTH / 5))));
+        const row = Math.min(3, Math.max(0, Math.floor(clickY / (CANVAS_HEIGHT / 4))));
+        const secName = `${SECTOR_ROWS[row]}${col + 1}`;
+        setSelectedSector((prev) => (prev === secName ? null : secName));
+      } else if (tool === 'pillar') {
+        // If clicked on existing pillar, remove it
+        const clickedPillarIndex = pillars.findIndex(
+          (p) => Math.hypot(p.x - clickX, p.y - clickY) < p.radius + 12
+        );
+        if (clickedPillarIndex >= 0) {
+          pillars.splice(clickedPillarIndex, 1);
+        } else if (clickY > WALL_BOTTOM_Y + 30 && clickY < CANVAS_HEIGHT - 30) {
+          // Add new deflection pillar
+          pillars.push({ id: nextPillarId++, x: clickX, y: clickY, radius: 22, stress: 0 });
+        }
+      } else if (tool === 'incident') {
+        // Detonate localized shockwave incident
+        shockwaves.push({ id: Date.now(), x: clickX, y: clickY, radius: 10, life: 3.5 });
+      }
+    };
+
+    canvas.addEventListener('click', handleCanvasClick);
 
     // Main 60 FPS Physics & Render Loop
     function physicsAndRender(timeNow: number) {
@@ -234,361 +382,532 @@ export default function SimulatorPage() {
       lastTime = timeNow;
       const dt = Math.min(dtRaw || 0.016, 0.033);
 
-      const currentSpawnRate = spawnRateRef.current;
-      const currentGateWidth = gateWidthRef.current;
-      const currentKineticMultiplier = kineticDriveRef.current;
+      if (!isPausedRef.current) {
+        const currentSpawnRate = spawnRateRef.current;
+        const currentGateWidth = gateWidthRef.current;
+        const currentKineticMultiplier = kineticDriveRef.current;
 
-      // ---------------------------------------------------------------------
-      // 1. SPAWN LOGIC: Continuously spawn agents at bottom of canvas
-      // ---------------------------------------------------------------------
-      spawnAccumulator += currentSpawnRate * dt;
-      while (spawnAccumulator >= 1 && agents.length < 240) {
-        spawnAccumulator -= 1;
-        agents.push(spawnAgent());
-      }
-      if (spawnAccumulator > 1) spawnAccumulator = 1;
+        // Reset barrier sensing panels accumulator
+        barrierP1Accum = 0;
+        barrierP2Accum = 0;
+        pillars.forEach((p) => { p.stress = 0; });
 
-      // Gate geometry: central opening flanked by two static walls at the top
-      const gateLeftEdge = (CANVAS_WIDTH - currentGateWidth) / 2;
-      const gateRightEdge = (CANVAS_WIDTH + currentGateWidth) / 2;
-      const gateTargetX = CANVAS_WIDTH / 2;
-      const gateTargetY = WALL_BOTTOM_Y + 12;
+        // Update shockwaves & panic contagion
+        for (let swIdx = shockwaves.length - 1; swIdx >= 0; swIdx--) {
+          const sw = shockwaves[swIdx];
+          sw.radius += 160 * dt; // Expansion speed
+          sw.life -= dt;
 
-      // ---------------------------------------------------------------------
-      // 2. HELBING SOCIAL FORCE COMPUTATION
-      // ---------------------------------------------------------------------
-      const v0_desired = PH.BASE_V0 * currentKineticMultiplier;
+          // Propagate panic contagion to agents caught in wave
+          for (let i = 0; i < agents.length; i++) {
+            const ag = agents[i];
+            const dist = Math.hypot(ag.x - sw.x, ag.y - sw.y);
+            if (Math.abs(dist - sw.radius) < 25) {
+              ag.panic = Math.min(1.0, ag.panic + 1.8 * dt);
+            }
+          }
 
-      // Spatial binning grid for O(N) neighbor contact lookups
-      const cellSize = 32;
-      const cols = Math.ceil(CANVAS_WIDTH / cellSize) + 1;
-      const rows = Math.ceil(CANVAS_HEIGHT / cellSize) + 1;
-      const grid: number[][] = Array.from({ length: cols * rows }, () => []);
-
-      for (let i = 0; i < agents.length; i++) {
-        const ag = agents[i];
-        const gx = Math.min(cols - 1, Math.max(0, Math.floor(ag.x / cellSize)));
-        const gy = Math.min(rows - 1, Math.max(0, Math.floor(ag.y / cellSize)));
-        grid[gx * rows + gy].push(i);
-      }
-
-      // Physics integration step for each agent
-      for (let i = 0; i < agents.length; i++) {
-        const a = agents[i];
-        let fx = 0;
-        let fy = 0;
-        let compressionForce = 0;
-
-        // A. DRIVE FORCE: Propel toward gate target
-        let targetX = a.x;
-        let targetY = a.y - 100;
-
-        if (a.y > WALL_BOTTOM_Y + 20) {
-          // If below the wall, steer toward the bottleneck aperture
-          targetX = gateTargetX;
-          targetY = gateTargetY;
-        } else if (a.x >= gateLeftEdge - 5 && a.x <= gateRightEdge + 5) {
-          // Inside or through the gate: advance upward into safe concourse
-          targetX = a.x;
-          targetY = -80;
-        } else {
-          // Cornered behind wall: slide toward the opening
-          targetX = a.x < CANVAS_WIDTH / 2 ? gateLeftEdge + 15 : gateRightEdge - 15;
-          targetY = WALL_BOTTOM_Y + 8;
+          if (sw.life <= 0 || sw.radius > 450) {
+            shockwaves.splice(swIdx, 1);
+          }
         }
 
-        const dxGoal = targetX - a.x;
-        const dyGoal = targetY - a.y;
-        const distGoal = Math.hypot(dxGoal, dyGoal) || 1;
-        const desiredVx = (dxGoal / distGoal) * v0_desired * 35; // scaled to canvas px/s
-        const desiredVy = (dyGoal / distGoal) * v0_desired * 35;
+        // ---------------------------------------------------------------------
+        // 1. SPAWN LOGIC: Continuously spawn agents at bottom of canvas
+        // ---------------------------------------------------------------------
+        spawnAccumulator += currentSpawnRate * dt;
+        while (spawnAccumulator >= 1 && agents.length < 240) {
+          spawnAccumulator -= 1;
+          agents.push(spawnAgent());
+        }
+        if (spawnAccumulator > 1) spawnAccumulator = 1;
 
-        // Drive force towards goal: m * (v0 - v) / tau
-        fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
-        fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+        // Gate geometry
+        const gateLeftEdge = (CANVAS_WIDTH - currentGateWidth) / 2;
+        const gateRightEdge = (CANVAS_WIDTH + currentGateWidth) / 2;
+        const gateTargetX = CANVAS_WIDTH / 2;
+        const gateTargetY = WALL_BOTTOM_Y + 12;
 
-        // B. WALL REPULSION & COLLISION: Static barriers at the top
-        const checkWalls = [
-          { x0: 0, y0: 0, x1: gateLeftEdge, y1: WALL_BOTTOM_Y },
-          { x0: gateRightEdge, y0: 0, x1: CANVAS_WIDTH, y1: WALL_BOTTOM_Y },
-        ];
+        // ---------------------------------------------------------------------
+        // 2. HELBING SOCIAL FORCE COMPUTATION (CALIBRATED REALITY)
+        // ---------------------------------------------------------------------
+        const v0_desired_base = PH.BASE_V0 * currentKineticMultiplier;
 
-        for (const wall of checkWalls) {
-          // Check collision with the wall bottom face
-          if (a.x >= wall.x0 - a.radius && a.x <= wall.x1 + a.radius) {
-            const dyWall = a.y - wall.y1;
-            if (dyWall < a.radius + 20 && dyWall > -a.radius) {
-              const overlap = a.radius - Math.max(0, dyWall);
-              if (overlap > 0) {
-                const fWall = Math.min(overlap * 3500 + 400, PH.MAX_FORCE);
-                fy += fWall;
-                compressionForce += fWall;
+        // Spatial binning grid
+        const cellSize = 32;
+        const cols = Math.ceil(CANVAS_WIDTH / cellSize) + 1;
+        const rows = Math.ceil(CANVAS_HEIGHT / cellSize) + 1;
+        const grid: number[][] = Array.from({ length: cols * rows }, () => []);
 
-                // Tangential slide toward gate aperture
-                const slideDir = a.x < CANVAS_WIDTH / 2 ? 1 : -1;
-                fx += slideDir * 800;
-              } else {
-                // Psychological wall proximity repulsion
-                fy += 350 * Math.exp(-dyWall / 8);
+        for (let i = 0; i < agents.length; i++) {
+          const ag = agents[i];
+          const gx = Math.min(cols - 1, Math.max(0, Math.floor(ag.x / cellSize)));
+          const gy = Math.min(rows - 1, Math.max(0, Math.floor(ag.y / cellSize)));
+          grid[gx * rows + gy].push(i);
+        }
+
+        // Physics integration step for each agent
+        for (let i = 0; i < agents.length; i++) {
+          const a = agents[i];
+          let fx = 0;
+          let fy = 0;
+          let compressionForce = 0;
+
+          // Panic decay
+          if (a.panic > 0) {
+            a.panic = Math.max(0, a.panic - dt * 0.15);
+          }
+
+          const currentAgentV0 = v0_desired_base * (1.0 + a.panic * 0.8);
+
+          // A. DRIVE FORCE: Propel toward gate target
+          let targetX = a.x;
+          let targetY = a.y - 100;
+
+          if (a.y > WALL_BOTTOM_Y + 20) {
+            targetX = gateTargetX;
+            targetY = gateTargetY;
+          } else if (a.x >= gateLeftEdge - 5 && a.x <= gateRightEdge + 5) {
+            targetX = a.x;
+            targetY = -80;
+          } else {
+            targetX = a.x < CANVAS_WIDTH / 2 ? gateLeftEdge + 15 : gateRightEdge - 15;
+            targetY = WALL_BOTTOM_Y + 8;
+          }
+
+          const dxGoal = targetX - a.x;
+          const dyGoal = targetY - a.y;
+          const distGoal = Math.hypot(dxGoal, dyGoal) || 1;
+          const desiredVx = (dxGoal / distGoal) * currentAgentV0 * 35;
+          const desiredVy = (dyGoal / distGoal) * currentAgentV0 * 35;
+
+          fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
+          fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+
+          // B. DEFLECTION PILLARS COLLISION
+          for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+            const pil = pillars[pIdx];
+            const dxP = a.x - pil.x;
+            const dyP = a.y - pil.y;
+            const distP = Math.hypot(dxP, dyP) || 1;
+            const overlapP = a.radius + pil.radius - distP;
+
+            if (distP < a.radius + pil.radius + 18) {
+              const nxP = dxP / distP;
+              const nyP = dyP / distP;
+
+              // Proximity deflection
+              const fSocialP = PH.A * 1.5 * Math.exp(-Math.max(0, -overlapP) / 8);
+              fx += fSocialP * nxP;
+              fy += fSocialP * nyP;
+
+              if (overlapP > 0) {
+                const fcP = Math.min(overlapP * PH.KN, PH.MAX_FORCE);
+                fx += fcP * nxP;
+                fy += fcP * nyP;
+                compressionForce += fcP;
+                pil.stress += fcP;
               }
             }
           }
 
-          // Check collision with the inner vertical edge posts of the gate
-          if (wall.x0 === 0 && Math.abs(a.x - gateLeftEdge) < a.radius + 8 && a.y < WALL_BOTTOM_Y + 8) {
-            const dxPost = a.x - gateLeftEdge;
-            const overlap = a.radius - Math.abs(dxPost);
-            if (overlap > 0) {
-              const fPost = overlap * 2500;
-              fx += (dxPost > 0 ? 1 : -1) * fPost;
-              compressionForce += fPost;
-            }
-          } else if (wall.x1 === CANVAS_WIDTH && Math.abs(a.x - gateRightEdge) < a.radius + 8 && a.y < WALL_BOTTOM_Y + 8) {
-            const dxPost = a.x - gateRightEdge;
-            const overlap = a.radius - Math.abs(dxPost);
-            if (overlap > 0) {
-              const fPost = overlap * 2500;
-              fx += (dxPost > 0 ? 1 : -1) * fPost;
-              compressionForce += fPost;
-            }
-          }
-        }
+          // C. WALL REPULSION & COLLISION
+          const checkWalls = [
+            { x0: 0, y0: 0, x1: gateLeftEdge, y1: WALL_BOTTOM_Y, isLeft: true },
+            { x0: gateRightEdge, y0: 0, x1: CANVAS_WIDTH, y1: WALL_BOTTOM_Y, isLeft: false },
+          ];
 
-        // Side boundary wall repulsion (left and right room edges)
-        if (a.x < a.radius + 15) {
-          const overlap = a.radius + 15 - a.x;
-          fx += overlap * 2000;
-          compressionForce += overlap * 400;
-        } else if (a.x > CANVAS_WIDTH - a.radius - 15) {
-          const overlap = a.x - (CANVAS_WIDTH - a.radius - 15);
-          fx -= overlap * 2000;
-          compressionForce += overlap * 400;
-        }
-
-        // C. AGENT REPULSION (SOCIAL FORCE & CONTACT OVERLAP COMPRESSION)
-        const agCellX = Math.min(cols - 1, Math.max(0, Math.floor(a.x / cellSize)));
-        const agCellY = Math.min(rows - 1, Math.max(0, Math.floor(a.y / cellSize)));
-
-        for (let ox = -1; ox <= 1; ox++) {
-          for (let oy = -1; oy <= 1; oy++) {
-            const nCellX = agCellX + ox;
-            const nCellY = agCellY + oy;
-            if (nCellX < 0 || nCellX >= cols || nCellY < 0 || nCellY >= rows) continue;
-            const neighborList = grid[nCellX * rows + nCellY];
-
-            for (let q = 0; q < neighborList.length; q++) {
-              const j = neighborList[q];
-              if (j === i) continue;
-              const b = agents[j];
-
-              const ddx = a.x - b.x;
-              const ddy = a.y - b.y;
-              const dist = Math.hypot(ddx, ddy) || 0.001;
-              const sumRadii = a.radius + b.radius;
-              const overlap = sumRadii - dist;
-
-              if (dist < sumRadii + 18) {
-                const nx = ddx / dist;
-                const ny = ddy / dist;
-
-                // Social psychological repulsion
-                const fSocial = 250 * Math.exp(-Math.max(0, -overlap) / 6);
-                fx += fSocial * nx;
-                fy += fSocial * ny;
-
-                // Physical hard contact compression force
+          for (const wall of checkWalls) {
+            if (a.x >= wall.x0 - a.radius && a.x <= wall.x1 + a.radius) {
+              const dyWall = a.y - wall.y1;
+              if (dyWall < a.radius + 16 && dyWall > -a.radius) {
+                const overlap = a.radius - Math.max(0, dyWall);
                 if (overlap > 0) {
-                  const fc = Math.min(overlap * 2400 + 350, PH.MAX_FORCE);
-                  fx += fc * nx;
-                  fy += fc * ny;
+                  const fWall = Math.min(overlap * (PH.KN * 1.2), PH.MAX_FORCE);
+                  fy += fWall;
+                  compressionForce += fWall;
 
-                  // Tangential sliding friction
-                  const tx = -ny;
-                  const ty = nx;
-                  const relSpeedTangent = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty;
-                  const ft = Math.min(overlap * 120 * relSpeedTangent, 800);
-                  fx += ft * tx;
-                  fy += ft * ty;
+                  // Tangential slide toward gate aperture
+                  const slideDir = a.x < CANVAS_WIDTH / 2 ? 1 : -1;
+                  fx += slideDir * 220;
 
-                  compressionForce += fc;
+                  // Measure barrier panel load in Newtons
+                  if (wall.isLeft) barrierP1Accum += fWall;
+                  else barrierP2Accum += fWall;
+                } else {
+                  fy += (PH.A * 1.2) * Math.exp(-dyWall / 8);
                 }
               }
             }
           }
+
+          // Side room boundary walls
+          if (a.x < a.radius + 15) {
+            const overlap = a.radius + 15 - a.x;
+            fx += overlap * 400;
+            compressionForce += overlap * 80;
+          } else if (a.x > CANVAS_WIDTH - a.radius - 15) {
+            const overlap = a.x - (CANVAS_WIDTH - a.radius - 15);
+            fx -= overlap * 400;
+            compressionForce += overlap * 80;
+          }
+
+          // D. AGENT-TO-AGENT SOCIAL FORCE & CONTACT COMPRESSION
+          const agCellX = Math.min(cols - 1, Math.max(0, Math.floor(a.x / cellSize)));
+          const agCellY = Math.min(rows - 1, Math.max(0, Math.floor(a.y / cellSize)));
+
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              const nCellX = agCellX + ox;
+              const nCellY = agCellY + oy;
+              if (nCellX < 0 || nCellX >= cols || nCellY < 0 || nCellY >= rows) continue;
+              const neighborList = grid[nCellX * rows + nCellY];
+
+              for (let q = 0; q < neighborList.length; q++) {
+                const j = neighborList[q];
+                if (j === i) continue;
+                const b = agents[j];
+
+                const ddx = a.x - b.x;
+                const ddy = a.y - b.y;
+                const dist = Math.hypot(ddx, ddy) || 0.001;
+                const sumRadii = a.radius + b.radius;
+                const overlap = sumRadii - dist;
+
+                if (dist < sumRadii + 14) {
+                  const nx = ddx / dist;
+                  const ny = ddy / dist;
+
+                  // Psychological avoidance
+                  const fSocial = PH.A * Math.exp(-Math.max(0, -overlap) / 6);
+                  fx += fSocial * nx;
+                  fy += fSocial * ny;
+
+                  // Real physical contact compression
+                  if (overlap > 0) {
+                    const fc = Math.min(overlap * PH.KN, PH.MAX_FORCE);
+                    fx += fc * nx;
+                    fy += fc * ny;
+
+                    // Tangential friction
+                    const tx = -ny;
+                    const ty = nx;
+                    const relSpeedTangent = (b.vx - a.vx) * tx + (b.vy - a.vy) * ty;
+                    const ft = Math.min(overlap * PH.KT * relSpeedTangent, 250);
+                    fx += ft * tx;
+                    fy += ft * ty;
+
+                    compressionForce += fc;
+                  }
+                }
+              }
+            }
+          }
+
+          // Apply net force and clamp
+          a.force = Math.min(compressionForce, PH.MAX_FORCE);
+          a.vx += (fx / a.mass) * dt;
+          a.vy += (fy / a.mass) * dt;
+
+          const currentSpeed = Math.hypot(a.vx, a.vy);
+          const maxAllowedSpeed = PH.MAX_SPEED * 35;
+          if (currentSpeed > maxAllowedSpeed) {
+            a.vx = (a.vx / currentSpeed) * maxAllowedSpeed;
+            a.vy = (a.vy / currentSpeed) * maxAllowedSpeed;
+          }
+
+          a.x += a.vx * dt;
+          a.y += a.vy * dt;
+
+          if (a.y > CANVAS_HEIGHT - a.radius) {
+            a.y = CANVAS_HEIGHT - a.radius;
+            a.vy = -Math.abs(a.vy) * 0.2;
+          }
         }
 
-        // Apply net force to accelerate the agent
-        a.force = Math.min(compressionForce, PH.MAX_FORCE);
-        a.vx += (fx / a.mass) * dt;
-        a.vy += (fy / a.mass) * dt;
-
-        // Clamp speed
-        const currentSpeed = Math.hypot(a.vx, a.vy);
-        const maxAllowedSpeed = PH.MAX_SPEED * 35;
-        if (currentSpeed > maxAllowedSpeed) {
-          a.vx = (a.vx / currentSpeed) * maxAllowedSpeed;
-          a.vy = (a.vy / currentSpeed) * maxAllowedSpeed;
+        // Agents escaping gate
+        const nowSec = timeNow / 1000;
+        for (let i = agents.length - 1; i >= 0; i--) {
+          if (agents[i].y < 12) {
+            agents.splice(i, 1);
+            escapedWindow.push(nowSec);
+          }
         }
 
-        // Integrate position
-        a.x += a.vx * dt;
-        a.y += a.vy * dt;
-
-        // Canvas bottom boundary restraint
-        if (a.y > CANVAS_HEIGHT - a.radius) {
-          a.y = CANVAS_HEIGHT - a.radius;
-          a.vy = -Math.abs(a.vy) * 0.2;
+        while (escapedWindow.length && escapedWindow[0] < nowSec - 15) {
+          escapedWindow.shift();
         }
+        const throughputCalculated = Math.round(escapedWindow.length * 4);
+
+        // ---------------------------------------------------------------------
+        // 3. TILE SYSTEM: 5x4 SECTOR GRID PRESSURE CALCULATOR
+        // ---------------------------------------------------------------------
+        const sectorWidth = CANVAS_WIDTH / 5;
+        const sectorHeight = CANVAS_HEIGHT / 4;
+        const sectorCounts = new Int32Array(20);
+        const sectorForceSums = new Float32Array(20);
+        const sectorMaxForces = new Float32Array(20);
+
+        let globalMaxForce = 0;
+        for (let i = 0; i < agents.length; i++) {
+          const ag = agents[i];
+          if (ag.force > globalMaxForce) {
+            globalMaxForce = ag.force;
+          }
+
+          const col = Math.min(4, Math.max(0, Math.floor(ag.x / sectorWidth)));
+          const row = Math.min(3, Math.max(0, Math.floor(ag.y / sectorHeight)));
+          const sIdx = row * 5 + col;
+
+          sectorCounts[sIdx]++;
+          sectorForceSums[sIdx] += ag.force;
+          if (ag.force > sectorMaxForces[sIdx]) {
+            sectorMaxForces[sIdx] = ag.force;
+          }
+        }
+
+        // Build 20 Sector Tiles with Pressure Scores
+        const currentSectors: SectorMetric[] = [];
+        let peakSectorScore = -1;
+        let peakSectorName = 'B3';
+
+        for (let r = 0; r < 4; r++) {
+          for (let c = 0; c < 5; c++) {
+            const idx = r * 5 + c;
+            const cnt = sectorCounts[idx];
+            const maxF = sectorMaxForces[idx];
+            const avgF = cnt > 0 ? sectorForceSums[idx] / cnt : 0;
+
+            // Pressure Score combining density and contact compressive force
+            const pressureRaw = (maxF / 2550) * 70 + (cnt * 2.5);
+            const score = Math.min(100, Math.round(pressureRaw));
+            const status: 'NORMAL' | 'WARNING' | 'CRITICAL' =
+              score >= 80 ? 'CRITICAL' : score >= 50 ? 'WARNING' : 'NORMAL';
+
+            const sectorName = `${SECTOR_ROWS[r]}${c + 1}`;
+            currentSectors.push({
+              sector: sectorName,
+              row: r,
+              col: c,
+              pressureScore: score,
+              agentCount: cnt,
+              peakForce: Math.round(maxF),
+              status,
+            });
+
+            if (score > peakSectorScore) {
+              peakSectorScore = score;
+              peakSectorName = sectorName;
+            }
+          }
+        }
+
+        // Calibrated 0-100 Peak Stress Index
+        // 2550 N is rib-fracture threshold => mapped to 85.0 on PSI scale
+        const normalizedPSI = Math.min(100, (globalMaxForce / 3000) * 100);
+
+        setPeakStressIndex(+(normalizedPSI.toFixed(1)));
+        setRawPeakForce(Math.round(globalMaxForce));
+        setActivePopulation(agents.length);
+        setThroughputPerMin(throughputCalculated);
+        setHotspotSector(peakSectorName);
+        setSectorTiles(currentSectors);
+
+        const p1_kN = +(barrierP1Accum / 1000).toFixed(2);
+        const p2_kN = +(barrierP2Accum / 1000).toFixed(2);
+        setBarrierP1(p1_kN);
+        setBarrierP2(p2_kN);
+
+        currentTelemetryRef.current = {
+          peakStress: normalizedPSI,
+          rawPeakForce: globalMaxForce,
+          activeAgents: agents.length,
+          throughput: throughputCalculated,
+          hotspotSector: peakSectorName,
+          hotspotPressure: Math.round(peakSectorScore),
+          barrierP1: p1_kN,
+          barrierP2: p2_kN,
+          sectorGrid: currentSectors,
+        };
       }
-
-      // Check for agents escaping through the gate (y < 12)
-      const nowSec = timeNow / 1000;
-      for (let i = agents.length - 1; i >= 0; i--) {
-        if (agents[i].y < 12) {
-          agents.splice(i, 1);
-          escapedWindow.push(nowSec);
-        }
-      }
-
-      // Calculate rolling throughput (escaped per minute over last 15s)
-      while (escapedWindow.length && escapedWindow[0] < nowSec - 15) {
-        escapedWindow.shift();
-      }
-      const throughputCalculated = Math.round(escapedWindow.length * 4);
-
-      // Compute Global Metric: Peak Stress Index (0-100 normalized)
-      let maxForce = 0;
-      for (let i = 0; i < agents.length; i++) {
-        if (agents[i].force > maxForce) {
-          maxForce = agents[i].force;
-        }
-      }
-
-      // 2550 N is rib-fracture threshold => mapped to 85.0 on PSI scale
-      const normalizedPSI = Math.min(100, (maxForce / 3000) * 100);
-
-      // Synchronize component telemetry state
-      setPeakStressIndex(+(normalizedPSI.toFixed(1)));
-      setRawPeakForce(Math.round(maxForce));
-      setActivePopulation(agents.length);
-      setThroughputPerMin(throughputCalculated);
-
-      currentTelemetryRef.current = {
-        peakStress: normalizedPSI,
-        rawPeakForce: maxForce,
-        activeAgents: agents.length,
-        throughput: throughputCalculated,
-        hotspotSector: maxForce > 1800 ? 'B2' : 'C3',
-      };
 
       // ---------------------------------------------------------------------
-      // 3. ADVANCED CANVAS RENDERING: "Physics & Flow" Photoelastic Aesthetic
+      // 4. ADVANCED CANVAS RENDERING: Photoelastic Bloom & 5x4 Sector Grid
       // ---------------------------------------------------------------------
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      // A. Tactical/Isometric Grid Background (#0A1A24)
+      const sectorWidth = CANVAS_WIDTH / 5;
+      const sectorHeight = CANVAS_HEIGHT / 4;
+      const currentGateWidth = gateWidthRef.current;
+      const gateLeftEdge = (CANVAS_WIDTH - currentGateWidth) / 2;
+      const gateRightEdge = (CANVAS_WIDTH + currentGateWidth) / 2;
+
+      // A. 5x4 Sector Grid Lines on Arena Floor
       ctx.save();
-      ctx.strokeStyle = '#0A1A24';
+      ctx.strokeStyle = '#0E171F';
       ctx.lineWidth = 1;
-      const gridGap = 32;
 
-      for (let gx = 0; gx <= CANVAS_WIDTH; gx += gridGap) {
+      for (let c = 1; c < 5; c++) {
         ctx.beginPath();
-        ctx.moveTo(gx, 0);
-        ctx.lineTo(gx, CANVAS_HEIGHT);
+        ctx.moveTo(c * sectorWidth, 0);
+        ctx.lineTo(c * sectorWidth, CANVAS_HEIGHT);
         ctx.stroke();
       }
-      for (let gy = 0; gy <= CANVAS_HEIGHT; gy += gridGap) {
+      for (let r = 1; r < 4; r++) {
         ctx.beginPath();
-        ctx.moveTo(0, gy);
-        ctx.lineTo(CANVAS_WIDTH, gy);
+        ctx.moveTo(0, r * sectorHeight);
+        ctx.lineTo(CANVAS_WIDTH, r * sectorHeight);
         ctx.stroke();
       }
 
-      // Sub-grid coordinate tags
-      ctx.fillStyle = 'rgba(79, 179, 217, 0.22)';
-      ctx.font = "8px 'IBM Plex Mono', monospace";
-      for (let col = 1; col < 5; col++) {
-        ctx.fillText(`SEC-B${col}`, col * (CANVAS_WIDTH / 5) - 40, CANVAS_HEIGHT - 12);
+      // Monospace Sector Grid Coordinate Labels (A1...D5)
+      ctx.font = "10px 'IBM Plex Mono', monospace";
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 5; c++) {
+          const secName = `${SECTOR_ROWS[r]}${c + 1}`;
+          const isHot = secName === currentTelemetryRef.current.hotspotSector;
+          const isSelected = secName === selectedSectorRef.current;
+
+          if (isHot) {
+            // Hotspot Sector Highlight Bounding Box
+            const hotCol = currentTelemetryRef.current.peakStress >= 85 ? '#D4513A' : '#D9A33C';
+            ctx.strokeStyle = hotCol;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(c * sectorWidth + 2, r * sectorHeight + 2, sectorWidth - 4, sectorHeight - 4);
+
+            // Pulsing Reticle Target
+            ctx.fillStyle = hotCol;
+            ctx.beginPath();
+            ctx.arc(c * sectorWidth + sectorWidth / 2, r * sectorHeight + sectorHeight / 2, 8 + Math.sin(timeNow * 0.006) * 3, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          if (isSelected) {
+            ctx.strokeStyle = '#4FB3D9';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.strokeRect(c * sectorWidth + 4, r * sectorHeight + 4, sectorWidth - 8, sectorHeight - 8);
+            ctx.setLineDash([]);
+          }
+
+          ctx.fillStyle = isHot ? '#D9A33C' : 'rgba(79, 179, 217, 0.45)';
+          ctx.fillText(secName, c * sectorWidth + 8, r * sectorHeight + 16);
+        }
       }
       ctx.restore();
 
       // B. Static Wall Boundaries at Top (Solid Photoelastic Gate Slabs)
       ctx.save();
-      // Left Wall
       ctx.fillStyle = '#10171D';
       ctx.fillRect(0, 0, gateLeftEdge, WALL_BOTTOM_Y);
-      // Right Wall
       ctx.fillRect(gateRightEdge, 0, CANVAS_WIDTH - gateRightEdge, WALL_BOTTOM_Y);
 
-      // Wall Edge photoelastic contact stress lines
-      const wallStressIntensity = Math.min(1, maxForce / 2400);
-      const wallEdgeColor =
-        wallStressIntensity > 0.8
-          ? '#D4513A'
-          : wallStressIntensity > 0.4
-          ? '#D9A33C'
-          : '#4FB3D9';
+      // Photoelastic Contact Stress Lines on Barrier Walls
+      const p1Ratio = Math.min(1, barrierP1Accum / 3000);
+      const p2Ratio = Math.min(1, barrierP2Accum / 3000);
 
-      ctx.strokeStyle = wallEdgeColor;
-      ctx.lineWidth = 3;
+      // Left Wall Sensing Edge
+      ctx.strokeStyle = p1Ratio > 0.7 ? '#D4513A' : p1Ratio > 0.3 ? '#D9A33C' : '#4FB3D9';
+      ctx.lineWidth = 3.5;
       ctx.beginPath();
-      // Left Wall Face
       ctx.moveTo(0, WALL_BOTTOM_Y);
       ctx.lineTo(gateLeftEdge, WALL_BOTTOM_Y);
       ctx.lineTo(gateLeftEdge, 0);
-      // Right Wall Face
+      ctx.stroke();
+
+      // Right Wall Sensing Edge
+      ctx.strokeStyle = p2Ratio > 0.7 ? '#D4513A' : p2Ratio > 0.3 ? '#D9A33C' : '#4FB3D9';
+      ctx.beginPath();
       ctx.moveTo(gateRightEdge, 0);
       ctx.lineTo(gateRightEdge, WALL_BOTTOM_Y);
       ctx.lineTo(CANVAS_WIDTH, WALL_BOTTOM_Y);
       ctx.stroke();
 
-      // Warning Chevron Striping along wall edges
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1;
-      for (let cx = 10; cx < gateLeftEdge - 10; cx += 24) {
-        ctx.beginPath();
-        ctx.moveTo(cx, WALL_BOTTOM_Y - 4);
-        ctx.lineTo(cx + 12, WALL_BOTTOM_Y - 20);
-        ctx.stroke();
-      }
-      for (let cx = gateRightEdge + 10; cx < CANVAS_WIDTH - 10; cx += 24) {
-        ctx.beginPath();
-        ctx.moveTo(cx, WALL_BOTTOM_Y - 4);
-        ctx.lineTo(cx + 12, WALL_BOTTOM_Y - 20);
-        ctx.stroke();
-      }
-
       // Gate Aperture Guide Markers
-      ctx.fillStyle = 'rgba(79, 179, 217, 0.6)';
+      ctx.fillStyle = 'rgba(79, 179, 217, 0.7)';
       ctx.font = "9px 'IBM Plex Mono', monospace";
-      ctx.fillText(`GATE APERTURE: ${currentGateWidth}PX`, gateLeftEdge + 8, 38);
+      ctx.fillText(`GATE: ${currentGateWidth}PX [P1: ${(barrierP1Accum / 1000).toFixed(2)}kN | P2: ${(barrierP2Accum / 1000).toFixed(2)}kN]`, gateLeftEdge + 6, 38);
       ctx.restore();
 
-      // C. Fading Motion Trails (Velocity Vectors)
+      // C. Deflection Pillars Rendering with Photoelastic Stress Rings
+      for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
+        const pil = pillars[pIdx];
+        const pStressU = Math.min(1, pil.stress / 2000);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pil.x, pil.y, pil.radius, 0, Math.PI * 2);
+
+        if (pStressU > 0.05) {
+          ctx.fillStyle = pStressU > 0.6 ? 'rgba(212, 81, 58, 0.4)' : 'rgba(217, 163, 60, 0.4)';
+          ctx.shadowBlur = 15 * pStressU;
+          ctx.shadowColor = pStressU > 0.6 ? '#D4513A' : '#D9A33C';
+          ctx.fill();
+
+          // Concentric fringe rings
+          ctx.strokeStyle = pStressU > 0.6 ? '#D4513A' : '#D9A33C';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#1A252E';
+          ctx.strokeStyle = '#4FB3D9';
+          ctx.lineWidth = 1.8;
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        // Inner anchor pin
+        ctx.fillStyle = '#0B1013';
+        ctx.beginPath();
+        ctx.arc(pil.x, pil.y, pil.radius * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = "8px 'IBM Plex Mono', monospace";
+        ctx.fillText(`OBSTACLE`, pil.x - 20, pil.y + 4);
+        ctx.restore();
+      }
+
+      // D. Shockwave Incidents (Expanding Contagion Rings)
+      for (let sIdx = 0; sIdx < shockwaves.length; sIdx++) {
+        const sw = shockwaves[sIdx];
+        ctx.save();
+        ctx.strokeStyle = 'rgba(212, 81, 58, 0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#D4513A';
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // E. Fading Motion Trails (Velocity Vectors)
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
       ctx.lineWidth = 1.2;
       for (let i = 0; i < agents.length; i++) {
         const a = agents[i];
         const vMag = Math.hypot(a.vx, a.vy);
-        if (vMag > 4) {
+        if (vMag > 3) {
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
-          // Trail drawn in opposite direction of current velocity
           ctx.lineTo(a.x - a.vx * 0.14, a.y - a.vy * 0.14);
           ctx.stroke();
         }
       }
       ctx.restore();
 
-      // D. Photoelastic Stress Bloom Particles (Screen / Lighter Blending)
+      // F. Photoelastic Stress Bloom Particles (Screen Blend)
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
 
       for (let i = 0; i < agents.length; i++) {
         const a = agents[i];
-        const stressRatio = Math.min(1, a.force / 2600);
+        const stressRatio = Math.min(1, a.force / 2550);
 
         let fillColor = 'rgba(79, 179, 217, 0.85)'; // Normal: Cyan
         let shadowColor = 'rgba(79, 179, 217, 0.5)';
@@ -598,7 +917,7 @@ export default function SimulatorPage() {
           fillColor = 'rgba(212, 81, 58, 0.95)';    // Critical: Crimson
           shadowColor = '#D4513A';
           shadowRadius = 18;
-        } else if (stressRatio >= 0.55) {
+        } else if (stressRatio >= 0.45) {
           fillColor = 'rgba(217, 163, 60, 0.92)';   // Warning: Amber
           shadowColor = '#D9A33C';
           shadowRadius = 14;
@@ -612,17 +931,17 @@ export default function SimulatorPage() {
         ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Inner core spark for high stress particles
-        if (stressRatio > 0.6) {
+        // High stress white core
+        if (stressRatio > 0.55) {
           ctx.fillStyle = '#FFFFFF';
           ctx.beginPath();
           ctx.arc(a.x, a.y, a.radius * 0.35, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-      ctx.restore(); // Restores source-over and clears shadowBlur
+      ctx.restore();
 
-      // E. Top 3 Highest-Stress Floating Tactical Labels
+      // G. Top 3 Highest-Stress Floating Tactical Labels
       ctx.save();
       const sortedByForce = [...agents].sort((a, b) => b.force - a.force);
       const top3Agents = sortedByForce.slice(0, 3);
@@ -632,7 +951,7 @@ export default function SimulatorPage() {
         const ag = top3Agents[i];
         if (ag.force > 250) {
           const isCrit = ag.force >= 2550;
-          const isWarn = ag.force >= 1650;
+          const isWarn = ag.force >= 1400;
           const tagBg = isCrit
             ? 'rgba(212, 81, 58, 0.85)'
             : isWarn
@@ -640,7 +959,6 @@ export default function SimulatorPage() {
             : 'rgba(20, 27, 33, 0.85)';
           const textCol = isCrit || isWarn ? '#FFFFFF' : '#4FB3D9';
 
-          // Floating bounding bracket
           const labelText = `[#${ag.id} F:${Math.round(ag.force)}N]`;
           const textWidth = ctx.measureText(labelText).width;
 
@@ -653,7 +971,6 @@ export default function SimulatorPage() {
           ctx.fillStyle = textCol;
           ctx.fillText(labelText, ag.x + ag.radius + 7, ag.y - 2);
 
-          // Indicator tick line to agent
           ctx.beginPath();
           ctx.moveTo(ag.x + ag.radius, ag.y);
           ctx.lineTo(ag.x + ag.radius + 4, ag.y - 5);
@@ -668,6 +985,7 @@ export default function SimulatorPage() {
     animationFrameId = requestAnimationFrame(physicsAndRender);
 
     return () => {
+      canvas.removeEventListener('click', handleCanvasClick);
       cancelAnimationFrame(animationFrameId);
     };
   }, [mounted]);
@@ -693,11 +1011,11 @@ export default function SimulatorPage() {
                 ForceSight
               </h1>
               <span className="text-[10px] tracking-widest px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300">
-                TWIN SANDBOX v2.4
+                TWIN SANDBOX v2.5
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-mono tracking-wide">
-              Helbing Social-Force Engine &middot; Photoelastic Birefringence Simulation
+              5&times;4 Sector Grid &middot; Deflection Pillars &middot; Helbing Social Force Model
             </p>
           </div>
         </div>
@@ -753,15 +1071,78 @@ export default function SimulatorPage() {
         {/* LEFT / CENTER: CANVAS SIMULATOR STAGE */}
         <div className="lg:col-span-8 flex flex-col gap-4">
           <div className="glass-panel p-2 flex-1 flex flex-col items-center justify-center relative overflow-hidden bg-black/90">
-            {/* Top Canvas Bar */}
-            <div className="w-full flex items-center justify-between px-3 py-1.5 border-b border-white/5 text-[11px] text-slate-400">
-              <span className="flex items-center gap-1.5 text-cyan-400">
-                <Activity className="w-3.5 h-3.5" />
-                <span>CHOKEPOINT KINEMATICS &middot; 60 FPS</span>
-              </span>
-              <span className="font-mono text-slate-500">
-                RESOLUTION: 960x680 &middot; ACTIVE PARTICLES: {activePopulation}
-              </span>
+            {/* Top Canvas Bar & Interactive Tool Switcher */}
+            <div className="w-full flex flex-wrap items-center justify-between px-3 py-2 border-b border-white/5 text-[11px] text-slate-300 gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-cyan-400 font-bold flex items-center gap-1">
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>TOOLS:</span>
+                </span>
+
+                {/* Inspect Tool */}
+                <button
+                  onClick={() => setActiveTool('inspect')}
+                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition ${
+                    activeTool === 'inspect'
+                      ? 'bg-cyan-500 text-black font-bold border-cyan-400 shadow-[0_0_8px_#4FB3D9]'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}
+                  title="Click anywhere on the floor to pin sector reticle"
+                >
+                  <Target className="w-3 h-3" />
+                  <span>[Inspect]</span>
+                </button>
+
+                {/* Pillar Placement Tool */}
+                <button
+                  onClick={() => setActiveTool('pillar')}
+                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition ${
+                    activeTool === 'pillar'
+                      ? 'bg-cyan-500 text-black font-bold border-cyan-400 shadow-[0_0_8px_#4FB3D9]'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}
+                  title="Click anywhere on the floor to place or remove deflection pillars"
+                >
+                  <PlusCircle className="w-3 h-3" />
+                  <span>[Pillar Tool]</span>
+                </button>
+
+                {/* Incident Shockwave Tool */}
+                <button
+                  onClick={() => setActiveTool('incident')}
+                  className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1 transition ${
+                    activeTool === 'incident'
+                      ? 'bg-red-500 text-white font-bold border-red-400 shadow-[0_0_8px_#D4513A]'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
+                  }`}
+                  title="Click inside crowd to ignite localized panic shockwave"
+                >
+                  <Bomb className="w-3 h-3" />
+                  <span>[Incident Tool]</span>
+                </button>
+
+                {/* Clear Pillars */}
+                <button
+                  onClick={() => clearPillarsActionRef.current?.()}
+                  className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-400 hover:text-white text-xs"
+                >
+                  Clear Pillars
+                </button>
+              </div>
+
+              {/* Simulation Play / Pause */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsPaused((prev) => !prev)}
+                  className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-xs text-slate-200 hover:border-cyan-400 flex items-center gap-1"
+                >
+                  {isPaused ? <Play className="w-3 h-3 text-emerald-400" /> : <Pause className="w-3 h-3 text-amber-400" />}
+                  <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                </button>
+                <span className="font-mono text-slate-500">
+                  HOTSPOT: <b className="text-amber-400">{hotspotSector}</b> &middot; PARTICLES: {activePopulation}
+                </span>
+              </div>
             </div>
 
             {/* 3D Transform Canvas Container */}
@@ -776,30 +1157,49 @@ export default function SimulatorPage() {
               />
             </div>
 
-            {/* Footer Canvas Status Hint */}
-            <div className="w-full px-3 py-1.5 border-t border-white/5 flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-2">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-[0_0_6px_#4FB3D9]" />
-                  <span>Normal (&lt;60)</span>
+            {/* Canvas Bottom Legend & Quick Scenario Presets */}
+            <div className="w-full px-3 py-2 border-t border-white/5 flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">PRESETS:</span>
+                <button
+                  onClick={() => applyPresetActionRef.current?.('calm')}
+                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-emerald-500 text-slate-300 text-[10px]"
+                >
+                  Calm Flow
+                </button>
+                <button
+                  onClick={() => applyPresetActionRef.current?.('surge')}
+                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-red-500 text-slate-300 text-[10px]"
+                >
+                  Bottleneck Rush
+                </button>
+                <button
+                  onClick={() => applyPresetActionRef.current?.('pillar_test')}
+                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-300 text-[10px]"
+                >
+                  Deflection Test
+                </button>
+                <button
+                  onClick={() => applyPresetActionRef.current?.('panic')}
+                  className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 hover:border-amber-400 text-slate-300 text-[10px]"
+                >
+                  Shockwave
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-slate-500">
+                  Left Barrier P1: <b className="text-slate-200">{barrierP1} kN</b>
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-[0_0_6px_#D9A33C]" />
-                  <span>Warning (60-85)</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shadow-[0_0_6px_#D4513A]" />
-                  <span>Critical (&gt;85)</span>
+                <span className="text-slate-500">
+                  Right Barrier P2: <b className="text-slate-200">{barrierP2} kN</b>
                 </span>
               </div>
-              <span className="text-slate-500">
-                Photoelastic Stress Bloom via &apos;screen&apos; blend &middot; Social Force Model
-              </span>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: DESKTOP CONTROL DECK & TELEMETRY RAIL */}
+        {/* RIGHT: DESKTOP CONTROL DECK & TILE SYSTEM HUD */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           {/* 1. PEAK STRESS INDEX IN MASSIVE GLOWING TYPOGRAPHY */}
           <div className="glass-panel p-4 border border-white/10 relative overflow-hidden">
@@ -808,7 +1208,7 @@ export default function SimulatorPage() {
                 <Flame className="w-4 h-4 text-cyan-400" />
                 Peak Stress Index
               </span>
-              <span className="text-[10px] text-slate-500">SCALE 0 - 100</span>
+              <span className="text-[10px] text-slate-500">HOTSPOT: SECTOR {hotspotSector}</span>
             </div>
 
             {/* Massive Metric Display */}
@@ -840,12 +1240,58 @@ export default function SimulatorPage() {
 
             <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono mt-1">
               <span>Peak Force: <b className="text-slate-200">{rawPeakForce} N</b></span>
-              <span>Rib Fracture Lim: <b className="text-red-400">2550 N</b></span>
+              <span>Fracture Lim: <b className="text-red-400">2550 N</b></span>
             </div>
           </div>
 
-          {/* 2. REAL-TIME INTERACTIVE SLIDERS */}
-          <div className="glass-panel p-4 border border-white/10 flex flex-col gap-4">
+          {/* 2. VENUE SECTOR GRID (5x4 TILE SYSTEM) */}
+          <div className="glass-panel p-3 border border-white/10 flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/5 pb-1.5">
+              <span className="flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-cyan-400" />
+                Venue Sector Grid (A1...D5)
+              </span>
+              <span className="text-[10px] text-amber-400 font-bold">
+                PEAK: {hotspotSector}
+              </span>
+            </div>
+
+            {/* 5x4 Sector Grid Tile Heatmap */}
+            <div className="grid grid-cols-5 gap-1.5 my-1">
+              {sectorTiles.map((tile) => {
+                const isHot = tile.sector === hotspotSector;
+                const isSelected = tile.sector === selectedSector;
+                const statusColor =
+                  tile.status === 'CRITICAL'
+                    ? 'bg-red-950/80 border-red-500 text-red-300'
+                    : tile.status === 'WARNING'
+                    ? 'bg-amber-950/80 border-amber-500 text-amber-300'
+                    : 'bg-slate-900/80 border-slate-700/60 text-slate-300';
+
+                return (
+                  <button
+                    key={tile.sector}
+                    onClick={() => setSelectedSector(isSelected ? null : tile.sector)}
+                    className={`p-1 rounded border text-center transition-all flex flex-col items-center justify-center ${statusColor} ${
+                      isHot ? 'ring-2 ring-amber-400 shadow-[0_0_8px_rgba(217,163,60,0.5)]' : ''
+                    } ${isSelected ? 'ring-2 ring-cyan-400 scale-105' : 'hover:border-slate-500'}`}
+                    title={`Sector ${tile.sector}: ${tile.agentCount} pax, Peak ${tile.peakForce}N`}
+                  >
+                    <span className="text-[10px] font-bold font-mono">{tile.sector}</span>
+                    <span className="text-[9px] text-slate-400">{tile.agentCount}p</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-white/5">
+              <span>Rows: A (Gate) &rarr; D (Ingress)</span>
+              <span>Click tile to pin reticle</span>
+            </div>
+          </div>
+
+          {/* 3. REAL-TIME INTERACTIVE SLIDERS */}
+          <div className="glass-panel p-4 border border-white/10 flex flex-col gap-3.5">
             <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider border-b border-white/5 pb-2">
               <span className="flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-cyan-400" />
@@ -853,9 +1299,9 @@ export default function SimulatorPage() {
               </span>
               <button
                 onClick={() => {
-                  setSpawnRate(6.5);
+                  setSpawnRate(5.5);
                   setGateWidth(140);
-                  setKineticDrive(1.2);
+                  setKineticDrive(1.1);
                 }}
                 className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
                 title="Reset sliders to nominal values"
@@ -866,7 +1312,7 @@ export default function SimulatorPage() {
             </div>
 
             {/* Slider 1: Agent Spawn Rate */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-300 uppercase">Agent Spawn Rate</span>
                 <span className="font-mono text-cyan-400">{spawnRate.toFixed(1)} /s</span>
@@ -879,11 +1325,10 @@ export default function SimulatorPage() {
                 value={spawnRate}
                 onChange={(e) => setSpawnRate(parseFloat(e.target.value))}
               />
-              <span className="text-[10px] text-slate-500">Controls inflow volume entering the chokepoint queue.</span>
             </div>
 
             {/* Slider 2: Gate Width */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-300 uppercase">Gate Width</span>
                 <span className="font-mono text-cyan-400">{gateWidth} px</span>
@@ -896,11 +1341,10 @@ export default function SimulatorPage() {
                 value={gateWidth}
                 onChange={(e) => setGateWidth(parseInt(e.target.value))}
               />
-              <span className="text-[10px] text-slate-500">Dynamically narrows or widens the static wall aperture.</span>
             </div>
 
             {/* Slider 3: Kinetic Drive (Panic Multiplier) */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-300 uppercase">Kinetic Drive (Panic)</span>
                 <span className="font-mono text-red-400">{kineticDrive.toFixed(1)}x</span>
@@ -913,24 +1357,23 @@ export default function SimulatorPage() {
                 value={kineticDrive}
                 onChange={(e) => setKineticDrive(parseFloat(e.target.value))}
               />
-              <span className="text-[10px] text-slate-500">Desired velocity multiplier v0 (1.0x calm &rarr; 3.0x stampede).</span>
             </div>
           </div>
 
-          {/* 3. ROLLING 30-SECOND RECHARTS TIME-SERIES */}
-          <div className="glass-panel p-4 border border-white/10 flex-1 flex flex-col">
+          {/* 4. ROLLING 30-SECOND RECHARTS TIME-SERIES */}
+          <div className="glass-panel p-3 border border-white/10 flex flex-col">
             <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
               <span className="flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-cyan-400" />
                 Rolling 30s Stress Telemetry
               </span>
-              <span className="text-[10px] text-slate-500">PEAK: {Math.round(rawPeakForce)}N</span>
+              <span className="text-[10px] text-slate-500">THROUGHPUT: {throughputPerMin}/min</span>
             </div>
 
-            <div className="w-full h-36 flex-1 min-h-[140px]">
+            <div className="w-full h-32 min-h-[120px]">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartHistory} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                  <AreaChart data={chartHistory} margin={{ top: 6, right: 8, left: -24, bottom: 0 }}>
                     <defs>
                       <linearGradient id="stressGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#D4513A" stopOpacity={0.85} />
@@ -973,19 +1416,19 @@ export default function SimulatorPage() {
             </div>
           </div>
 
-          {/* 4. MICRO-METRICS (Actively Jittered) */}
-          <div className="glass-panel p-3 border border-white/10 grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 rounded bg-black/40 border border-white/5">
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider">Flow Divergence</div>
-              <div className="text-sm font-mono font-bold text-cyan-300 mt-0.5">{flowDivergence}</div>
+          {/* 5. MICRO-METRICS (Actively Jittered) */}
+          <div className="glass-panel p-2.5 border border-white/10 grid grid-cols-3 gap-2 text-center">
+            <div className="p-1.5 rounded bg-black/40 border border-white/5">
+              <div className="text-[9px] text-slate-400 uppercase tracking-wider">Flow Divergence</div>
+              <div className="text-xs font-mono font-bold text-cyan-300 mt-0.5">{flowDivergence}</div>
             </div>
-            <div className="p-2 rounded bg-black/40 border border-white/5">
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider">Hysteresis</div>
-              <div className="text-sm font-mono font-bold text-amber-300 mt-0.5">{hysteresisDebounce}</div>
+            <div className="p-1.5 rounded bg-black/40 border border-white/5">
+              <div className="text-[9px] text-slate-400 uppercase tracking-wider">Hysteresis</div>
+              <div className="text-xs font-mono font-bold text-amber-300 mt-0.5">{hysteresisDebounce}</div>
             </div>
-            <div className="p-2 rounded bg-black/40 border border-white/5">
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider">Density Matrix</div>
-              <div className="text-sm font-mono font-bold text-slate-200 mt-0.5">{frameDensityMatrix}</div>
+            <div className="p-1.5 rounded bg-black/40 border border-white/5">
+              <div className="text-[9px] text-slate-400 uppercase tracking-wider">Density Matrix</div>
+              <div className="text-xs font-mono font-bold text-slate-200 mt-0.5">{frameDensityMatrix}</div>
             </div>
           </div>
         </div>

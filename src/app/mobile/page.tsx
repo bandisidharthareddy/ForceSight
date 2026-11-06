@@ -14,6 +14,8 @@ import {
   Compass,
   ArrowUpRight,
   Shield,
+  Target,
+  Layers,
 } from 'lucide-react';
 import { TelemetryState } from '../api/telemetry/route';
 
@@ -27,17 +29,21 @@ export default function MobileGuardDashboard() {
     alertLevel: 'NORMAL',
     alertMessage: 'STATUS: FLOW NORMAL',
     hotspotSector: 'B3',
+    hotspotPressure: 18,
     gateWidth: 1.4,
     spawnRate: 4.5,
     kineticDrive: 1.0,
     opticalFlowDivergence: 0.0142,
     hysteresisDebounce: 0.982,
     frameDensityMatrix: '64x64 [OK]',
+    barrierP1: 0.12,
+    barrierP2: 0.15,
+    sectorGrid: [],
     timestamp: Date.now(),
   });
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
-  const [acknowledged, setAcknowledged] = useState<boolean>(false);
+  const [acknowledgedSector, setAcknowledgedSector] = useState<string | null>(null);
   const [lastVibratedTime, setLastVibratedTime] = useState<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -254,14 +260,63 @@ export default function MobileGuardDashboard() {
             <span>Force: <b className="text-white">{telemetry.rawPeakForce} N</b></span>
             <span>Limit: <b className="text-red-400">2550 N</b></span>
           </div>
+
+          {/* Barrier Load Sensors P1 & P2 */}
+          <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-2 text-[11px] font-mono">
+            <div className="p-1.5 rounded bg-black/40 border border-white/5 flex justify-between items-center">
+              <span className="text-slate-400">P1 Wall (L):</span>
+              <span className="font-bold text-cyan-300">{(telemetry.barrierP1 ?? 0.12).toFixed(2)} kN</span>
+            </div>
+            <div className="p-1.5 rounded bg-black/40 border border-white/5 flex justify-between items-center">
+              <span className="text-slate-400">P2 Wall (R):</span>
+              <span className="font-bold text-cyan-300">{(telemetry.barrierP2 ?? 0.15).toFixed(2)} kN</span>
+            </div>
+          </div>
         </div>
 
-        {/* Fast Action Buttons */}
+        {/* 5x4 Venue Sector Grid Mini-Heatmap */}
+        {telemetry.sectorGrid && telemetry.sectorGrid.length > 0 && (
+          <div className="w-full glass-panel p-3 border border-white/10 rounded-xl mb-5 bg-black/60 backdrop-blur-xl">
+            <div className="flex justify-between items-center text-[10px] text-slate-400 uppercase tracking-wider mb-2">
+              <span className="flex items-center gap-1">
+                <Target className="w-3 h-3 text-cyan-400" />
+                <span>Sector Pressure Matrix (A1...D5)</span>
+              </span>
+              <span className="text-amber-400 font-bold">HOTSPOT: {telemetry.hotspotSector}</span>
+            </div>
+
+            <div className="grid grid-cols-5 gap-1">
+              {telemetry.sectorGrid.map((tile) => {
+                const isHot = tile.sector === telemetry.hotspotSector;
+                const tileBg =
+                  tile.status === 'CRITICAL'
+                    ? 'bg-red-600/60 border-red-500 text-red-200'
+                    : tile.status === 'WARNING'
+                    ? 'bg-amber-600/50 border-amber-500 text-amber-200'
+                    : 'bg-black/50 border-white/5 text-slate-400';
+
+                return (
+                  <div
+                    key={tile.sector}
+                    className={`p-1 rounded text-center border text-[9px] font-mono flex flex-col justify-center items-center ${tileBg} ${
+                      isHot ? 'ring-2 ring-amber-400 shadow-[0_0_8px_rgba(217,163,60,0.6)] font-bold text-white' : ''
+                    }`}
+                  >
+                    <span>{tile.sector}</span>
+                    <span className="text-[8px] opacity-75">{tile.pressureScore}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Sector Dispatch Action */}
         <div className="w-full flex flex-col gap-2.5">
           <button
-            onClick={() => setAcknowledged(true)}
-            className={`w-full py-3.5 rounded-lg font-bold font-sans tracking-wider uppercase text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${
-              acknowledged
+            onClick={() => setAcknowledgedSector(telemetry.hotspotSector)}
+            className={`w-full py-3.5 rounded-lg font-bold font-sans tracking-wider uppercase text-xs sm:text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${
+              acknowledgedSector === telemetry.hotspotSector
                 ? 'bg-slate-800 text-slate-400 border border-slate-700'
                 : isCritical
                 ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_25px_rgba(212,81,58,0.7)] animate-pulse'
@@ -271,7 +326,11 @@ export default function MobileGuardDashboard() {
             }`}
           >
             <Radio className="w-4 h-4" />
-            <span>{acknowledged ? 'DISPATCH ACKNOWLEDGED' : 'ACKNOWLEDGE & DEPLOY MARSHALS'}</span>
+            <span>
+              {acknowledgedSector === telemetry.hotspotSector
+                ? `DISPATCH ACKNOWLEDGED → SECTOR ${telemetry.hotspotSector}`
+                : `DISPATCH MARSHALS → SECTOR ${telemetry.hotspotSector}`}
+            </span>
           </button>
 
           {isCritical && (

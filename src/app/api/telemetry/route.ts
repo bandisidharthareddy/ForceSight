@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
 
+export interface SectorMetric {
+  sector: string;       // e.g. "A1", "B3"
+  row: number;          // 0 to 3
+  col: number;          // 0 to 4
+  pressureScore: number;// 0 to 100
+  agentCount: number;
+  peakForce: number;    // In Newtons
+  status: 'NORMAL' | 'WARNING' | 'CRITICAL';
+}
+
 export interface TelemetryState {
   peakStress: number;               // 0 - 100 Normalized Peak Stress Index
   rawPeakForce: number;             // Maximum single-agent contact force in Newtons
@@ -8,13 +18,17 @@ export interface TelemetryState {
   throughput: number;               // Escaped agents per minute
   alertLevel: 'NORMAL' | 'WARNING' | 'CRITICAL';
   alertMessage: string;
-  hotspotSector: string;            // e.g. "C4"
+  hotspotSector: string;            // e.g. "B3"
+  hotspotPressure: number;          // 0 to 100
   gateWidth: number;                // In meters
   spawnRate: number;                // Agents / sec
   kineticDrive: number;             // Multiplier (1.0x - 3.0x)
   opticalFlowDivergence: number;    // Micro-metric
   hysteresisDebounce: number;       // Micro-metric
   frameDensityMatrix: string;       // Micro-metric
+  barrierP1: number;                // kN on Left Gate Barrier
+  barrierP2: number;                // kN on Right Gate Barrier
+  sectorGrid: SectorMetric[];       // 20 sectors (5x4 tile system)
   timestamp: number;
 }
 
@@ -25,22 +39,43 @@ const CORS_HEADERS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate',
 };
 
+// Default 5x4 Sector Grid
+const SECTOR_ROWS = ['A', 'B', 'C', 'D'];
+const initialSectorGrid: SectorMetric[] = [];
+for (let r = 0; r < 4; r++) {
+  for (let c = 0; c < 5; c++) {
+    initialSectorGrid.push({
+      sector: `${SECTOR_ROWS[r]}${c + 1}`,
+      row: r,
+      col: c,
+      pressureScore: 12,
+      agentCount: 3,
+      peakForce: 150,
+      status: 'NORMAL',
+    });
+  }
+}
+
 // In-memory telemetry storage holding live synchronized digital twin metrics
 let currentTelemetry: TelemetryState = {
-  peakStress: 14.5,
-  rawPeakForce: 420,
-  meanForce: 85,
-  activeAgents: 64,
-  throughput: 38,
+  peakStress: 18.5,
+  rawPeakForce: 550,
+  meanForce: 120,
+  activeAgents: 55,
+  throughput: 36,
   alertLevel: 'NORMAL',
   alertMessage: 'STATUS: FLOW NORMAL',
   hotspotSector: 'B3',
+  hotspotPressure: 24,
   gateWidth: 1.4,
-  spawnRate: 4.5,
-  kineticDrive: 1.0,
+  spawnRate: 6.5,
+  kineticDrive: 1.2,
   opticalFlowDivergence: 0.0142,
   hysteresisDebounce: 0.982,
   frameDensityMatrix: '64x64 [OK]',
+  barrierP1: 0.42,
+  barrierP2: 0.38,
+  sectorGrid: initialSectorGrid,
   timestamp: Date.now(),
 };
 
@@ -107,7 +142,6 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
-    // Fail gracefully with current telemetry
     return NextResponse.json(
       { success: true, telemetry: currentTelemetry },
       {
