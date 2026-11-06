@@ -20,6 +20,8 @@ export interface TelemetryState {
   alertMessage: string;
   hotspotSector: string;            // e.g. "B3"
   hotspotPressure: number;          // 0 to 100
+  selectedSector?: string;          // User-selected box coordinate e.g. "C2"
+  selectedSectorStress?: number;    // Localized peak stress of selected box
   gateWidth: number;                // In meters
   spawnRate: number;                // Agents / sec
   kineticDrive: number;             // Multiplier (1.0x - 3.0x)

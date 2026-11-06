@@ -103,9 +103,13 @@ export default function SimulatorPage() {
   const [barrierP1, setBarrierP1] = useState<number>(0.12);
   const [barrierP2, setBarrierP2] = useState<number>(0.15);
   const [sectorTiles, setSectorTiles] = useState<SectorMetric[]>([]);
-  const [selectedSector, setSelectedSector] = useState<string | null>(null);
-  const selectedSectorRef = useRef<string | null>(null);
+  const [selectedSector, setSelectedSector] = useState<string>('B3');
+  const selectedSectorRef = useRef<string>('B3');
   useEffect(() => { selectedSectorRef.current = selectedSector; }, [selectedSector]);
+
+  const [selectedSectorStress, setSelectedSectorStress] = useState<number>(14.5);
+  const [selectedSectorPeakForce, setSelectedSectorPeakForce] = useState<number>(440);
+  const [selectedSectorAgents, setSelectedSectorAgents] = useState<number>(0);
 
   const [chartHistory, setChartHistory] = useState<ChartDataPoint[]>([]);
   const [mounted, setMounted] = useState<boolean>(false);
@@ -130,6 +134,10 @@ export default function SimulatorPage() {
     throughput: 0,
     hotspotSector: 'B3',
     hotspotPressure: 15,
+    selectedSector: 'B3',
+    selectedSectorStress: 14.5,
+    selectedSectorPeakForce: 440,
+    selectedSectorAgents: 0,
     barrierP1: 0.12,
     barrierP2: 0.15,
     sectorGrid: [] as SectorMetric[],
@@ -183,6 +191,8 @@ export default function SimulatorPage() {
             throughput: snap.throughput,
             hotspotSector: snap.hotspotSector,
             hotspotPressure: snap.hotspotPressure,
+            selectedSector: snap.selectedSector,
+            selectedSectorStress: snap.selectedSectorStress,
             gateWidth: +(gateWidthRef.current / 100).toFixed(2),
             spawnRate: spawnRateRef.current,
             kineticDrive: kineticDriveRef.current,
@@ -208,8 +218,8 @@ export default function SimulatorPage() {
     const chartInterval = setInterval(() => {
       const now = new Date();
       const timeStr = `${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-      const curPSI = currentTelemetryRef.current.peakStress;
-      const curRaw = currentTelemetryRef.current.rawPeakForce;
+      const curPSI = currentTelemetryRef.current.selectedSectorStress ?? currentTelemetryRef.current.peakStress;
+      const curRaw = currentTelemetryRef.current.selectedSectorPeakForce ?? currentTelemetryRef.current.rawPeakForce;
 
       setChartHistory((prev) => {
         const next = [...prev, { time: timeStr, psi: Math.round(curPSI), rawForce: Math.round(curRaw) }];
@@ -862,6 +872,25 @@ export default function SimulatorPage() {
         // 2550 N is rib-fracture threshold => mapped to 85.0 on PSI scale
         const normalizedPSI = Math.min(100, (globalMaxForce / 3000) * 100);
 
+        // Extract isolated metrics for the selected box only
+        const activeSelSector = selectedSectorRef.current || peakSectorName;
+        const selRowIdx = SECTOR_ROWS.indexOf(activeSelSector.charAt(0).toUpperCase());
+        const selColIdx = parseInt(activeSelSector.slice(1), 10) - 1;
+        let selMaxF = 0;
+        let selCnt = 0;
+        let selPSI = 0;
+
+        if (selRowIdx >= 0 && selRowIdx < 4 && selColIdx >= 0 && selColIdx < 5) {
+          const sIdx = selRowIdx * 5 + selColIdx;
+          selMaxF = sectorMaxForces[sIdx];
+          selCnt = sectorCounts[sIdx];
+          selPSI = +(Math.min(100, (selMaxF / 3000) * 100).toFixed(1));
+        }
+
+        setSelectedSectorStress(selPSI);
+        setSelectedSectorPeakForce(Math.round(selMaxF));
+        setSelectedSectorAgents(selCnt);
+
         setPeakStressIndex(+(normalizedPSI.toFixed(1)));
         setRawPeakForce(Math.round(globalMaxForce));
         setActivePopulation(agents.length);
@@ -881,6 +910,10 @@ export default function SimulatorPage() {
           throughput: throughputCalculated,
           hotspotSector: peakSectorName,
           hotspotPressure: Math.round(peakSectorScore),
+          selectedSector: activeSelSector,
+          selectedSectorStress: selPSI,
+          selectedSectorPeakForce: Math.round(selMaxF),
+          selectedSectorAgents: selCnt,
           barrierP1: p1_kN,
           barrierP2: p2_kN,
           sectorGrid: currentSectors,
@@ -939,11 +972,30 @@ export default function SimulatorPage() {
           }
 
           if (isSelected) {
-            ctx.strokeStyle = '#4FB3D9';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 4]);
-            ctx.strokeRect(c * sectorWidth + 4, r * sectorHeight + 4, sectorWidth - 8, sectorHeight - 8);
-            ctx.setLineDash([]);
+            const bx = c * sectorWidth + 2;
+            const by = r * sectorHeight + 2;
+            const bw = sectorWidth - 4;
+            const bh = sectorHeight - 4;
+
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+            ctx.fillRect(bx, by, bw, bh);
+
+            ctx.strokeStyle = '#38BDF8';
+            ctx.lineWidth = 1.8;
+            ctx.strokeRect(bx, by, bw, bh);
+
+            const clen = 12;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(bx, by + clen); ctx.lineTo(bx, by); ctx.lineTo(bx + clen, by);
+            ctx.moveTo(bx + bw - clen, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + clen);
+            ctx.moveTo(bx, by + bh - clen); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + clen, by + bh);
+            ctx.moveTo(bx + bw - clen, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - clen);
+            ctx.stroke();
+
+            ctx.fillStyle = '#38BDF8';
+            ctx.font = "9px 'IBM Plex Mono', monospace";
+            ctx.fillText(`[BOX ${secName}: ${currentTelemetryRef.current.selectedSectorStress} PSI]`, bx + 6, by + bh - 6);
           }
 
           ctx.fillStyle = isHot ? '#D9A33C' : 'rgba(79, 179, 217, 0.45)';
@@ -1146,7 +1198,12 @@ export default function SimulatorPage() {
     };
   }, [mounted]);
 
-  // UI state colors based on current Peak Stress Index
+  // UI state colors based on Selected Box Peak Stress Index
+  const isSelectedCrit = selectedSectorStress >= 85;
+  const isSelectedWarn = selectedSectorStress >= 60 && !isSelectedCrit;
+  const selectedAlertColor = isSelectedCrit ? 'var(--crit)' : isSelectedWarn ? 'var(--warn)' : 'var(--steel)';
+
+  // Global Alert Level
   const isCritical = peakStressIndex >= 85;
   const isWarning = peakStressIndex >= 60 && !isCritical;
   const alertColor = isCritical ? 'var(--crit)' : isWarning ? 'var(--warn)' : 'var(--steel)';
@@ -1296,7 +1353,7 @@ export default function SimulatorPage() {
                   <span>{isPaused ? 'Resume' : 'Pause'}</span>
                 </button>
                 <span className="font-mono text-slate-500">
-                  HOTSPOT: <b className="text-amber-400">{hotspotSector}</b> &middot; PARTICLES: {activePopulation}
+                  SELECTED: <b className="text-cyan-300">BOX {selectedSector} ({selectedSectorStress} PSI)</b> &middot; HOTSPOT: <b className="text-amber-400">{hotspotSector}</b> &middot; PARTICLES: {activePopulation}
                 </span>
               </div>
             </div>
@@ -1357,26 +1414,28 @@ export default function SimulatorPage() {
 
         {/* RIGHT: DESKTOP CONTROL DECK & TILE SYSTEM HUD */}
         <div className="lg:col-span-4 flex flex-col gap-4">
-          {/* 1. PEAK STRESS INDEX IN MASSIVE GLOWING TYPOGRAPHY */}
+          {/* 1. PEAK STRESS INDEX (OF SELECTED BOX ONLY) */}
           <div className="glass-panel p-4 border border-white/10 relative overflow-hidden">
             <div className="flex items-center justify-between text-xs text-slate-400 tracking-wider uppercase mb-1">
-              <span className="flex items-center gap-1.5 font-bold">
+              <span className="flex items-center gap-1.5 font-bold text-cyan-300">
                 <Flame className="w-4 h-4 text-cyan-400" />
-                Peak Stress Index
+                Peak Stress &middot; Box {selectedSector}
               </span>
-              <span className="text-[10px] text-slate-500">HOTSPOT: SECTOR {hotspotSector}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-400/40 text-cyan-300 font-bold">
+                SELECTED BOX ONLY
+              </span>
             </div>
 
-            {/* Massive Metric Display */}
+            {/* Massive Metric Display for Selected Box */}
             <div className="flex items-baseline gap-3 my-1">
               <span
                 className="text-6xl font-black tracking-tight font-sans"
                 style={{
-                  color: alertColor,
-                  textShadow: `0 0 32px ${alertColor}80`,
+                  color: selectedAlertColor,
+                  textShadow: `0 0 32px ${selectedAlertColor}80`,
                 }}
               >
-                {peakStressIndex}
+                {selectedSectorStress}
               </span>
               <span className="text-sm font-mono text-slate-400">
                 / 100.0
@@ -1387,15 +1446,16 @@ export default function SimulatorPage() {
               <div
                 className="h-full transition-all duration-300"
                 style={{
-                  width: `${Math.min(100, peakStressIndex)}%`,
-                  backgroundColor: alertColor,
-                  boxShadow: `0 0 12px ${alertColor}`,
+                  width: `${Math.min(100, selectedSectorStress)}%`,
+                  backgroundColor: selectedAlertColor,
+                  boxShadow: `0 0 12px ${selectedAlertColor}`,
                 }}
               />
             </div>
 
             <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono mt-1">
-              <span>Peak Force: <b className="text-slate-200">{rawPeakForce} N</b></span>
+              <span>Box Peak Force: <b className="text-slate-200">{selectedSectorPeakForce} N</b></span>
+              <span>In Box: <b className="text-cyan-300">{selectedSectorAgents} pax</b></span>
               <span>Fracture Lim: <b className="text-red-400">2550 N</b></span>
             </div>
           </div>
@@ -1427,11 +1487,15 @@ export default function SimulatorPage() {
                 return (
                   <button
                     key={tile.sector}
-                    onClick={() => setSelectedSector(isSelected ? null : tile.sector)}
+                    onClick={() => setSelectedSector(tile.sector)}
                     className={`p-1 rounded border text-center transition-all flex flex-col items-center justify-center ${statusColor} ${
-                      isHot ? 'ring-2 ring-amber-400 shadow-[0_0_8px_rgba(217,163,60,0.5)]' : ''
-                    } ${isSelected ? 'ring-2 ring-cyan-400 scale-105' : 'hover:border-slate-500'}`}
-                    title={`Sector ${tile.sector}: ${tile.agentCount} pax, Peak ${tile.peakForce}N`}
+                      isHot ? 'ring-1 ring-amber-400 shadow-[0_0_8px_rgba(217,163,60,0.5)]' : ''
+                    } ${
+                      isSelected
+                        ? 'ring-2 ring-cyan-400 bg-cyan-950/80 text-cyan-200 shadow-[0_0_12px_rgba(56,189,248,0.6)] scale-105 font-bold'
+                        : 'hover:border-slate-500'
+                    }`}
+                    title={`Click to show Peak Stress Index of Sector ${tile.sector}`}
                   >
                     <span className="text-[10px] font-bold font-mono">{tile.sector}</span>
                     <span className="text-[9px] text-slate-400">{tile.agentCount}p</span>
@@ -1440,9 +1504,25 @@ export default function SimulatorPage() {
               })}
             </div>
 
-            <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1 border-t border-white/5">
-              <span>Rows: A (Gate) &rarr; D (Ingress)</span>
-              <span>Click tile to pin reticle</span>
+            {/* Quick Filter Helpers */}
+            <div className="flex items-center justify-between text-[10px] text-slate-400 px-1 pt-1.5 border-t border-white/5">
+              <span>Focus: <b className="text-cyan-300 font-bold">Box {selectedSector}</b></span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setSelectedSector(hotspotSector)}
+                  className="px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300 hover:border-amber-400 text-[10px] transition"
+                  title="Jump to the highest pressure sector in the venue"
+                >
+                  Hotspot ({hotspotSector})
+                </button>
+                <button
+                  onClick={() => setSelectedSector('B3')}
+                  className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[10px] transition"
+                  title="Reset focus to the gate chokepoint"
+                >
+                  Gate (B3)
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1521,7 +1601,7 @@ export default function SimulatorPage() {
             <div className="flex items-center justify-between text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
               <span className="flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                Rolling 30s Stress Telemetry
+                Rolling 30s Stress &middot; Box {selectedSector}
               </span>
               <span className="text-[10px] text-slate-500">THROUGHPUT: {throughputPerMin}/min</span>
             </div>
