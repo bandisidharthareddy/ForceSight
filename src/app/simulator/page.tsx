@@ -458,15 +458,25 @@ export default function SimulatorPage() {
 
           const currentAgentV0 = v0_desired_base * (1.0 + a.panic * 0.8);
 
-          // A. DRIVE FORCE: Propel toward gate target with clamped aperture logic
+          // A. DRIVE FORCE: Propel toward gate target with smart waypoint steering
           // Clamping targetX to the open gate aperture ensures parallel forward movement (targetX = a.x)
-          // for all agents with direct line of sight to the gate. Only agents obstructed behind walls
-          // steer diagonally inward toward the gate edges.
-          const edgeBuffer = Math.min(a.radius + 2, (gateRightEdge - gateLeftEdge) * 0.45);
+          // for all agents with direct line of sight to the gate.
+          const edgeBuffer = Math.min(a.radius + 3, (gateRightEdge - gateLeftEdge) * 0.45);
           const gateTargetLeft = gateLeftEdge + edgeBuffer;
           const gateTargetRight = gateRightEdge - edgeBuffer;
           const targetX = Math.max(gateTargetLeft, Math.min(gateTargetRight, a.x));
-          const targetY = -40; // Top exit boundary
+
+          // Smart Waypoint Steering:
+          // Agents behind the solid wall steer toward the gate opening entrance (WALL_BOTTOM_Y + 22)
+          // so they naturally route around the wall rather than trying to cut diagonally through the solid corner!
+          // Only agents in front of or inside the gate opening steer directly upward to the exit (-40).
+          let targetY = -40;
+          if (a.y > WALL_BOTTOM_Y) {
+            const isBehindWall = a.x < gateLeftEdge + 4 || a.x > gateRightEdge - 4;
+            if (isBehindWall) {
+              targetY = WALL_BOTTOM_Y + 22;
+            }
+          }
 
           const dxGoal = targetX - a.x;
           const dyGoal = targetY - a.y;
@@ -505,119 +515,77 @@ export default function SimulatorPage() {
           }
 
           // C. SOLID WALL REPULSION & COLLISION (SOLID RECTANGULAR SLABS)
-          // 1. Left Wall Solid Slab: (-inf, gateLeftEdge] x (-inf, WALL_BOTTOM_Y]
-          if (a.x < gateLeftEdge + 25 && a.y < WALL_BOTTOM_Y + 35) {
-            if (a.x <= gateLeftEdge && a.y >= WALL_BOTTOM_Y) {
-              // Below left wall face
-              const dyWall = a.y - WALL_BOTTOM_Y;
-              const overlap = a.radius - dyWall;
+          // 1. Left Solid Barrier Wall: (-inf, gateLeftEdge] x (-inf, WALL_BOTTOM_Y]
+          {
+            const cx = Math.min(gateLeftEdge, a.x);
+            const cy = Math.min(WALL_BOTTOM_Y, a.y);
+            const dx = a.x - cx;
+            const dy = a.y - cy;
+            const dist = Math.hypot(dx, dy);
+
+            if (a.x < gateLeftEdge && a.y < WALL_BOTTOM_Y) {
+              // Deep inside slab
+              fy += 2200;
+              compressionForce += 1200;
+              barrierP1Accum += 1200;
+            } else if (dist < a.radius + 24) {
+              const nx = dist > 0.001 ? dx / dist : 0;
+              const ny = dist > 0.001 ? dy / dist : 1;
+              const overlap = a.radius - dist;
+
               if (overlap > 0) {
-                const fWall = Math.min(overlap * (PH.KN * 2.2), PH.MAX_FORCE);
-                fy += fWall;
+                const fWall = Math.min(overlap * (PH.KN * 2.8), PH.MAX_FORCE);
+                fx += fWall * nx;
+                fy += fWall * ny;
                 compressionForce += fWall;
                 barrierP1Accum += fWall;
-                fx += 320; // Lateral slide toward open gate
               } else {
-                fy += (PH.A * 1.5) * Math.exp(-dyWall / 6);
-                fx += 160;
+                const fSocial = (PH.A * 1.8) * Math.exp(-(dist - a.radius) / 6);
+                fx += fSocial * nx;
+                fy += fSocial * ny;
               }
-            } else if (a.x >= gateLeftEdge && a.y <= WALL_BOTTOM_Y) {
-              // Inside gate aperture along left vertical face
-              const dxWall = a.x - gateLeftEdge;
-              const overlap = a.radius - dxWall;
-              if (overlap > 0) {
-                const fWall = Math.min(overlap * (PH.KN * 2.2), PH.MAX_FORCE);
-                fx += fWall;
-                compressionForce += fWall;
-                barrierP1Accum += fWall;
-              } else {
-                fx += (PH.A * 1.5) * Math.exp(-dxWall / 6);
+
+              // Lateral sliding along bottom wall toward gate aperture
+              if (a.y >= WALL_BOTTOM_Y && a.x < gateLeftEdge) {
+                fx += 340;
               }
-            } else if (a.x > gateLeftEdge && a.y > WALL_BOTTOM_Y) {
-              // Near bottom-right corner of left wall
-              const cdx = a.x - gateLeftEdge;
-              const cdy = a.y - WALL_BOTTOM_Y;
-              const cdist = Math.hypot(cdx, cdy) || 0.001;
-              if (cdist < a.radius + 18) {
-                const cnx = cdx / cdist;
-                const cny = cdy / cdist;
-                const overlap = a.radius - cdist;
-                if (overlap > 0) {
-                  const fCorner = Math.min(overlap * (PH.KN * 2.2), PH.MAX_FORCE);
-                  fx += fCorner * cnx;
-                  fy += fCorner * cny;
-                  compressionForce += fCorner;
-                  barrierP1Accum += fCorner;
-                } else {
-                  const fSocial = (PH.A * 1.5) * Math.exp(-(cdist - a.radius) / 6);
-                  fx += fSocial * cnx;
-                  fy += fSocial * cny;
-                }
-              }
-            } else {
-              // Inside left slab (eject downward and rightward)
-              fy += 1500;
-              fx += 1500;
-              compressionForce += 800;
-              barrierP1Accum += 800;
             }
           }
 
-          // 2. Right Wall Solid Slab: [gateRightEdge, +inf) x (-inf, WALL_BOTTOM_Y]
-          if (a.x > gateRightEdge - 25 && a.y < WALL_BOTTOM_Y + 35) {
-            if (a.x >= gateRightEdge && a.y >= WALL_BOTTOM_Y) {
-              // Below right wall face
-              const dyWall = a.y - WALL_BOTTOM_Y;
-              const overlap = a.radius - dyWall;
+          // 2. Right Solid Barrier Wall: [gateRightEdge, +inf) x (-inf, WALL_BOTTOM_Y]
+          {
+            const cx = Math.max(gateRightEdge, a.x);
+            const cy = Math.min(WALL_BOTTOM_Y, a.y);
+            const dx = a.x - cx;
+            const dy = a.y - cy;
+            const dist = Math.hypot(dx, dy);
+
+            if (a.x > gateRightEdge && a.y < WALL_BOTTOM_Y) {
+              // Deep inside slab
+              fy += 2200;
+              compressionForce += 1200;
+              barrierP2Accum += 1200;
+            } else if (dist < a.radius + 24) {
+              const nx = dist > 0.001 ? dx / dist : 0;
+              const ny = dist > 0.001 ? dy / dist : 1;
+              const overlap = a.radius - dist;
+
               if (overlap > 0) {
-                const fWall = Math.min(overlap * (PH.KN * 2.2), PH.MAX_FORCE);
-                fy += fWall;
+                const fWall = Math.min(overlap * (PH.KN * 2.8), PH.MAX_FORCE);
+                fx += fWall * nx;
+                fy += fWall * ny;
                 compressionForce += fWall;
                 barrierP2Accum += fWall;
-                fx -= 320; // Lateral slide toward open gate
               } else {
-                fy += (PH.A * 1.5) * Math.exp(-dyWall / 6);
-                fx -= 160;
+                const fSocial = (PH.A * 1.8) * Math.exp(-(dist - a.radius) / 6);
+                fx += fSocial * nx;
+                fy += fSocial * ny;
               }
-            } else if (a.x <= gateRightEdge && a.y <= WALL_BOTTOM_Y) {
-              // Inside gate aperture along right vertical face
-              const dxWall = gateRightEdge - a.x;
-              const overlap = a.radius - dxWall;
-              if (overlap > 0) {
-                const fWall = Math.min(overlap * (PH.KN * 2.2), PH.MAX_FORCE);
-                fx -= fWall;
-                compressionForce += fWall;
-                barrierP2Accum += fWall;
-              } else {
-                fx -= (PH.A * 1.5) * Math.exp(-dxWall / 6);
+
+              // Lateral sliding along bottom wall toward gate aperture
+              if (a.y >= WALL_BOTTOM_Y && a.x > gateRightEdge) {
+                fx -= 340;
               }
-            } else if (a.x < gateRightEdge && a.y > WALL_BOTTOM_Y) {
-              // Near bottom-left corner of right wall
-              const cdx = a.x - gateRightEdge;
-              const cdy = a.y - WALL_BOTTOM_Y;
-              const cdist = Math.hypot(cdx, cdy) || 0.001;
-              if (cdist < a.radius + 18) {
-                const cnx = cdx / cdist;
-                const cny = cdy / cdist;
-                const overlap = a.radius - cdist;
-                if (overlap > 0) {
-                  const fCorner = Math.min(overlap * (PH.KN * 2.2), PH.MAX_FORCE);
-                  fx += fCorner * cnx;
-                  fy += fCorner * cny;
-                  compressionForce += fCorner;
-                  barrierP2Accum += fCorner;
-                } else {
-                  const fSocial = (PH.A * 1.5) * Math.exp(-(cdist - a.radius) / 6);
-                  fx += fSocial * cnx;
-                  fy += fSocial * cny;
-                }
-              }
-            } else {
-              // Inside right slab (eject downward and leftward)
-              fy += 1500;
-              fx -= 1500;
-              compressionForce += 800;
-              barrierP2Accum += 800;
             }
           }
 
@@ -702,83 +670,78 @@ export default function SimulatorPage() {
           // -------------------------------------------------------------------
           // HARD RIGID SOLID BOUNDARY CONSTRAINTS (NO PENETRATION / HOLLOW CLIPPING)
           // -------------------------------------------------------------------
-          // 1. Left Solid Barrier Wall: [0, gateLeftEdge] x [0, WALL_BOTTOM_Y]
-          if (a.x < gateLeftEdge + a.radius && a.y < WALL_BOTTOM_Y + a.radius) {
-            if (a.x <= gateLeftEdge && a.y >= WALL_BOTTOM_Y) {
-              // Below bottom surface of left wall
+          // 1. Left Solid Barrier Wall: (-inf, gateLeftEdge] x (-inf, WALL_BOTTOM_Y]
+          {
+            const cx = Math.min(gateLeftEdge, a.x);
+            const cy = Math.min(WALL_BOTTOM_Y, a.y);
+            const dx = a.x - cx;
+            const dy = a.y - cy;
+            const dist = Math.hypot(dx, dy);
+
+            if (a.x < gateLeftEdge && a.y < WALL_BOTTOM_Y) {
+              // Deep inside slab - eject strictly below the bottom wall
               a.y = WALL_BOTTOM_Y + a.radius;
               if (a.vy < 0) a.vy = 0;
-            } else if (a.x >= gateLeftEdge && a.y <= WALL_BOTTOM_Y) {
-              // Inside gate aperture against left vertical face
+            } else if (dist < a.radius) {
+              const nx = dist > 0.001 ? dx / dist : 0;
+              const ny = dist > 0.001 ? dy / dist : 1;
+              a.x = cx + nx * a.radius;
+              a.y = cy + ny * a.radius;
+              const vDot = a.vx * nx + a.vy * ny;
+              if (vDot < 0) {
+                a.vx -= vDot * nx;
+                a.vy -= vDot * ny;
+              }
+            }
+          }
+
+          // 2. Right Solid Barrier Wall: [gateRightEdge, +inf) x (-inf, WALL_BOTTOM_Y]
+          {
+            const cx = Math.max(gateRightEdge, a.x);
+            const cy = Math.min(WALL_BOTTOM_Y, a.y);
+            const dx = a.x - cx;
+            const dy = a.y - cy;
+            const dist = Math.hypot(dx, dy);
+
+            if (a.x > gateRightEdge && a.y < WALL_BOTTOM_Y) {
+              // Deep inside slab - eject strictly below the bottom wall
+              a.y = WALL_BOTTOM_Y + a.radius;
+              if (a.vy < 0) a.vy = 0;
+            } else if (dist < a.radius) {
+              const nx = dist > 0.001 ? dx / dist : 0;
+              const ny = dist > 0.001 ? dy / dist : 1;
+              a.x = cx + nx * a.radius;
+              a.y = cy + ny * a.radius;
+              const vDot = a.vx * nx + a.vy * ny;
+              if (vDot < 0) {
+                a.vx -= vDot * nx;
+                a.vy -= vDot * ny;
+              }
+            }
+          }
+
+          // 3. Absolute Perimeter Safety Clamp (Impenetrable Box Enclosure)
+          if (a.y < WALL_BOTTOM_Y) {
+            // Inside the gate opening corridor: strictly bound between aperture walls
+            if (a.x < gateLeftEdge + a.radius) {
               a.x = gateLeftEdge + a.radius;
               if (a.vx < 0) a.vx = 0;
-            } else if (a.x > gateLeftEdge && a.y > WALL_BOTTOM_Y) {
-              // Rounded corner of left wall
-              const cdx = a.x - gateLeftEdge;
-              const cdy = a.y - WALL_BOTTOM_Y;
-              const cdist = Math.hypot(cdx, cdy);
-              if (cdist < a.radius && cdist > 0.001) {
-                const cnx = cdx / cdist;
-                const cny = cdy / cdist;
-                a.x = gateLeftEdge + cnx * a.radius;
-                a.y = WALL_BOTTOM_Y + cny * a.radius;
-                const vNorm = a.vx * cnx + a.vy * cny;
-                if (vNorm < 0) {
-                  a.vx -= vNorm * cnx;
-                  a.vy -= vNorm * cny;
-                }
-              }
-            } else if (a.x < gateLeftEdge && a.y < WALL_BOTTOM_Y) {
-              // Deep inside solid left slab - eject to closest boundary
-              if (WALL_BOTTOM_Y - a.y <= gateLeftEdge - a.x) {
-                a.y = WALL_BOTTOM_Y + a.radius;
-                if (a.vy < 0) a.vy = 0;
-              } else {
-                a.x = gateLeftEdge + a.radius;
-                if (a.vx < 0) a.vx = 0;
-              }
-            }
-          }
-
-          // 2. Right Solid Barrier Wall: [gateRightEdge, CANVAS_WIDTH] x [0, WALL_BOTTOM_Y]
-          if (a.x > gateRightEdge - a.radius && a.y < WALL_BOTTOM_Y + a.radius) {
-            if (a.x >= gateRightEdge && a.y >= WALL_BOTTOM_Y) {
-              // Below bottom surface of right wall
-              a.y = WALL_BOTTOM_Y + a.radius;
-              if (a.vy < 0) a.vy = 0;
-            } else if (a.x <= gateRightEdge && a.y <= WALL_BOTTOM_Y) {
-              // Inside gate aperture against right vertical face
+            } else if (a.x > gateRightEdge - a.radius) {
               a.x = gateRightEdge - a.radius;
               if (a.vx > 0) a.vx = 0;
-            } else if (a.x < gateRightEdge && a.y > WALL_BOTTOM_Y) {
-              // Rounded corner of right wall
-              const cdx = a.x - gateRightEdge;
-              const cdy = a.y - WALL_BOTTOM_Y;
-              const cdist = Math.hypot(cdx, cdy);
-              if (cdist < a.radius && cdist > 0.001) {
-                const cnx = cdx / cdist;
-                const cny = cdy / cdist;
-                a.x = gateRightEdge + cnx * a.radius;
-                a.y = WALL_BOTTOM_Y + cny * a.radius;
-                const vNorm = a.vx * cnx + a.vy * cny;
-                if (vNorm < 0) {
-                  a.vx -= vNorm * cnx;
-                  a.vy -= vNorm * cny;
-                }
-              }
-            } else if (a.x > gateRightEdge && a.y < WALL_BOTTOM_Y) {
-              // Deep inside solid right slab - eject to closest boundary
-              if (WALL_BOTTOM_Y - a.y <= a.x - gateRightEdge) {
-                a.y = WALL_BOTTOM_Y + a.radius;
-                if (a.vy < 0) a.vy = 0;
-              } else {
-                a.x = gateRightEdge - a.radius;
-                if (a.vx > 0) a.vx = 0;
-              }
+            }
+          } else {
+            // Behind the solid walls: y cannot be less than WALL_BOTTOM_Y + a.radius
+            if (a.x <= gateLeftEdge && a.y < WALL_BOTTOM_Y + a.radius) {
+              a.y = WALL_BOTTOM_Y + a.radius;
+              if (a.vy < 0) a.vy = 0;
+            } else if (a.x >= gateRightEdge && a.y < WALL_BOTTOM_Y + a.radius) {
+              a.y = WALL_BOTTOM_Y + a.radius;
+              if (a.vy < 0) a.vy = 0;
             }
           }
 
-          // 3. Deflection Pillars Hard Solid Circular Obstacles
+          // 4. Deflection Pillars Hard Solid Circular Obstacles
           for (let pIdx = 0; pIdx < pillars.length; pIdx++) {
             const pil = pillars[pIdx];
             const pdx = a.x - pil.x;
