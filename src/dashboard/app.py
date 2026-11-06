@@ -280,7 +280,8 @@ def main() -> None:
                 st.session_state.is_playing = False
             step_clicked = c3.button("Step", key="btn_step", width="stretch")
             if c4.button("Reset", key="btn_rewind", width="stretch"):
-                st.session_state.loader.seek_frame(0)
+                st.session_state.loader.seek(0)
+                st.session_state.stream = st.session_state.loader.stream_frames()
                 st.session_state.pipeline.reset()
                 st.session_state.history_frames.clear()
                 st.session_state.history_psi.clear()

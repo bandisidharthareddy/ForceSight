@@ -1,513 +1,591 @@
-"""ForceSight Virtual Bench & Early-Warning Console.
+"""ForceSight client-side interactive photoelastic crowd simulator widget.
 
-Full-fidelity granular crowd dynamics simulation and physical photoelastic bench.
-Implements:
-1. Venue Sector Grid (A1 to D5) with live localized pressure mapping and hotspot bounding boxes.
-2. Security Guard Dispatch with acoustic alerts, location tagging, and marshal acknowledge button.
-3. Interactive Canvas Tools: click-to-place deflection pillars anywhere, click-to-ignite panic shockwaves.
-4. Physical photoelastic material light-up: solid barrier walls, boundary panels, and deflection pillars
-   physically illuminate with Flamant contact stress lobes and Michel-Lévy isochromatic fringe rings.
-5. True venue flow & wall sliding mechanics: space-filling parallel walk, zero premature diagonal funneling,
-   hard physical wall impact, and wall-normal induced tangential lateral sliding toward the exit gate.
+Renders an industrial control-room console with:
+1. 5x4 Sector Grid (A1...D5) with real-time localized pressure tracking (rho * Var(v) + sigma_c).
+2. Security Marshal Dispatch card with ACKNOWLEDGE button and acoustic alerts.
+3. Interactive Canvas Tools (Pillar placement & removal + Shockwave Incident detonation with contagion waves).
+4. Physical photoelastic material light-up on solid barrier walls (Flamant lobes) & deflection pillars (diametral fringes).
+5. Parallel space-filling ingress across room width and tangential wall-sliding mechanics.
+Zero emojis, strict professional typography (Barlow Condensed, IBM Plex Mono, IBM Plex Sans).
 """
 
+
 def get_simulator_html(initial_particles: int = 115, initial_fps: int = 60) -> str:
-    """Generate the complete, self-contained ForceSight control-room console HTML."""
+    """Generate the complete self-contained HTML/JS widget for Streamlit."""
     html_template = """<!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ForceSight Virtual Bench &amp; Command Console</title>
+<title>ForceSight Virtual Bench</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
 <style>
-/* Industrial Control-Room Console Styling. Dark by design. Zero emojis. */
 :root {
-  --bg:#0D1114; --panel:#141B21; --panel2:#1B242C; --line:#28343D; --line2:#3A4A56;
-  --ink:#E8EFF4; --ink2:#93A4B1; --ink3:#64757F;
-  --steel:#4FB3D9; --good:#3E9E6B; --warn:#D9A33C; --crit:#D4513A;
-  --fd:"Barlow Condensed",'Arial Narrow',sans-serif;
-  --fb:"IBM Plex Sans",system-ui,sans-serif;
-  --fm:"IBM Plex Mono",ui-monospace,monospace;
-  color-scheme:dark;
+  --bg: #0D1114;
+  --panel: #141B21;
+  --panel2: #1B242C;
+  --line: #28343D;
+  --line2: #3A4A56;
+  --ink: #E8EFF4;
+  --ink2: #93A4B1;
+  --ink3: #64757F;
+  --steel: #4FB3D9;
+  --good: #3E9E6B;
+  --warn: #D9A33C;
+  --crit: #D4513A;
+  --fd: "Barlow Condensed", 'Arial Narrow', sans-serif;
+  --fb: "IBM Plex Sans", system-ui, sans-serif;
+  --fm: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
 }
-* { box-sizing:border-box; margin:0; padding:0; }
+
+* { box-sizing: border-box; }
 body {
-  background:var(--bg);
-  color:var(--ink);
-  font-family:var(--fb);
-  min-height:100%;
-  -webkit-font-smoothing:antialiased;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--fb);
+  margin: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-user-select: none;
 }
+
 .wrap {
-  padding-left:max(16px,env(safe-area-inset-left,0px));
-  padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:14px 20px;
-  max-width:1500px;
-  margin:0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 20px;
+  max-width: 1540px;
+  margin: 0 auto;
 }
 
 header {
-  display:flex;
-  flex-wrap:wrap;
-  align-items:flex-end;
-  gap:12px 20px;
-  border-bottom:1px solid var(--line);
-  padding-bottom:12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
 }
+
 .brand {
-  display:flex;
-  align-items:baseline;
-  gap:10px;
-  min-width:0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
+
 .brand h1 {
-  font-family:var(--fd);
-  font-weight:700;
-  font-size:clamp(26px,4vw,38px);
-  letter-spacing:.5px;
-  line-height:1;
+  font-family: var(--fd);
+  font-weight: 700;
+  font-size: clamp(26px, 3.8vw, 36px);
+  letter-spacing: 0.8px;
+  margin: 0;
+  line-height: 1;
+  text-transform: uppercase;
 }
+
 .brand .sub {
-  font-family:var(--fd);
-  font-size:15px;
-  letter-spacing:2.4px;
-  color:var(--ink3);
-  text-transform:uppercase;
+  font-family: var(--fd);
+  font-size: 14px;
+  letter-spacing: 2.2px;
+  color: var(--ink3);
+  text-transform: uppercase;
 }
+
 .tabs {
-  display:flex;
-  border:1px solid var(--line2);
-  border-radius:3px;
-  overflow:hidden;
-  margin-left:auto;
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-left: auto;
 }
+
 .tabs button {
-  font-family:var(--fd);
-  font-size:15px;
-  letter-spacing:1.4px;
-  text-transform:uppercase;
-  background:transparent;
-  color:var(--ink2);
-  border:0;
-  padding:8px 14px;
-  cursor:pointer;
-  transition:background 0.15s, color 0.15s;
+  font-family: var(--fd);
+  font-size: 14px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--ink2);
+  border: 0;
+  padding: 8px 15px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
+
 .tabs button[aria-selected="true"] {
-  background:var(--steel);
-  color:#06181F;
-  font-weight:600;
+  background: var(--steel);
+  color: #06181F;
+  font-weight: 600;
 }
+
 .tabs button:focus-visible {
-  outline:2px solid var(--steel);
-  outline-offset:-2px;
+  outline: 2px solid var(--steel);
+  outline-offset: -2px;
 }
 
 .grid {
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 352px;
-  gap:16px;
-  margin-top:14px;
-  align-items:start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 356px;
+  gap: 16px;
+  margin-top: 14px;
+  align-items: start;
 }
-@media (max-width:920px) {
-  .grid { grid-template-columns:minmax(0,1fr); }
+
+@media (max-width: 980px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .stage {
-  min-width:0;
-  background:var(--panel);
-  border:1px solid var(--line);
-  border-radius:4px;
-  overflow:hidden;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
 }
+
 .toolbar {
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px 12px;
-  align-items:center;
-  padding:10px 12px;
-  border-bottom:1px solid var(--line);
-  background:var(--panel2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel2);
 }
+
 .ctl {
-  display:flex;
-  align-items:center;
-  gap:6px;
-  min-width:0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
+
 .ctl label {
-  font-family:var(--fd);
-  font-size:13.5px;
-  letter-spacing:1.2px;
-  text-transform:uppercase;
-  color:var(--ink2);
-  white-space:nowrap;
+  font-family: var(--fd);
+  font-size: 13.5px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--ink2);
+  white-space: nowrap;
 }
+
 .ctl output {
-  font-family:var(--fm);
-  font-size:12.5px;
-  color:var(--ink);
-  min-width:44px;
+  font-family: var(--fm);
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 48px;
 }
+
 input[type=range] {
-  width:88px;
-  accent-color:var(--steel);
+  width: 96px;
+  accent-color: var(--steel);
+  cursor: pointer;
 }
+
 button.btn {
-  font-family:var(--fd);
-  font-size:14px;
-  letter-spacing:1.2px;
-  text-transform:uppercase;
-  background:var(--panel);
-  color:var(--ink);
-  border:1px solid var(--line2);
-  border-radius:3px;
-  padding:6px 11px;
-  cursor:pointer;
-  transition:border-color 0.15s, color 0.15s, background 0.15s;
+  font-family: var(--fd);
+  font-size: 14px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line2);
+  border-radius: 3px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
+
 button.btn:hover {
-  border-color:var(--steel);
-  color:#fff;
+  border-color: var(--steel);
+  color: #fff;
 }
+
 button.btn:focus-visible {
-  outline:2px solid var(--steel);
-  outline-offset:2px;
+  outline: 2px solid var(--steel);
+  outline-offset: 2px;
 }
-button.btn.active, button.btn[aria-pressed="true"] {
-  background:var(--steel);
-  color:#06181F;
-  border-color:var(--steel);
-  font-weight:600;
-}
+
 button.btn.danger {
-  border-color:#6B2B20;
-  color:#F0A292;
+  border-color: #6B2B20;
+  color: #F0A292;
 }
+
 button.btn.danger:hover {
-  background:var(--crit);
-  color:#120605;
-  border-color:var(--crit);
+  background: var(--crit);
+  color: #120605;
+  border-color: var(--crit);
+}
+
+button.btn[aria-pressed="true"] {
+  background: var(--steel);
+  color: #06181F;
+  border-color: var(--steel);
+  font-weight: 600;
+}
+
+button.btn.active-tool {
+  background: #1B3C4D;
+  border-color: var(--steel);
+  color: #E8EFF4;
 }
 
 .canvaswrap {
-  position:relative;
-  background:#080B0D;
+  position: relative;
+  background: #080B0D;
 }
+
 canvas#view {
-  display:block;
-  width:100%;
-  height:clamp(340px,58vh,600px);
-  cursor:crosshair;
+  display: block;
+  width: 100%;
+  height: clamp(340px, 56vh, 580px);
+  cursor: crosshair;
 }
+
 .canvas-hint {
-  position:absolute;
-  bottom:8px;
-  left:12px;
-  right:12px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  font-family:var(--fm);
-  font-size:11px;
-  color:rgba(232,239,244,0.6);
-  pointer-events:none;
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  font-family: var(--fm);
+  font-size: 11px;
+  color: rgba(232, 239, 244, 0.7);
+  pointer-events: none;
+  background: rgba(13, 17, 20, 0.75);
+  padding: 3px 8px;
+  border-radius: 2px;
+  border: 1px solid rgba(40, 52, 61, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.canvas-hint span.tag {
-  background:rgba(27,36,44,0.85);
-  border:1px solid var(--line2);
-  padding:2px 8px;
-  border-radius:2px;
+
+.canvas-hint .tag {
+  color: var(--steel);
+  font-weight: 600;
 }
+
 .ramp {
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:8px 12px;
-  border-top:1px solid var(--line);
-  background:var(--panel2);
-  flex-wrap:wrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel2);
+  flex-wrap: wrap;
 }
+
 .ramp .bar {
-  height:9px;
-  width:170px;
-  border-radius:2px;
+  height: 9px;
+  width: 170px;
+  border-radius: 2px;
+  border: 1px solid rgba(255,255,255,0.08);
 }
+
 .ramp span {
-  font-family:var(--fd);
-  font-size:13px;
-  letter-spacing:1.2px;
-  text-transform:uppercase;
-  color:var(--ink3);
+  font-family: var(--fd);
+  font-size: 13px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ink3);
 }
 
 .rail {
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  min-width:0;
-}
-.alarm {
-  border-radius:4px;
-  padding:12px 14px;
-  border:1px solid var(--line2);
-  background:var(--panel);
-  transition:border-color 0.25s, background 0.25s;
-}
-.alarm .header-line {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-.alarm .state {
-  font-family:var(--fd);
-  font-size:28px;
-  font-weight:700;
-  letter-spacing:2px;
-  line-height:1;
-  text-transform:uppercase;
-}
-.alarm .sector-badge {
-  font-family:var(--fm);
-  font-size:12px;
-  font-weight:600;
-  padding:2px 8px;
-  border-radius:2px;
-  border:1px solid var(--line2);
-  background:rgba(0,0,0,0.3);
-  color:var(--steel);
-}
-.alarm .adv {
-  font-size:13px;
-  color:var(--ink2);
-  margin-top:6px;
-  line-height:1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
 
-/* Guard Dispatch Alert Card */
+.alarm {
+  border-radius: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  transition: border-color 0.25s, background 0.25s;
+}
+
+.alarm .header-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alarm .state {
+  font-family: var(--fd);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.alarm .sector-badge {
+  font-family: var(--fm);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid var(--line2);
+  background: rgba(0,0,0,0.3);
+  color: var(--steel);
+}
+
+.alarm .adv {
+  font-size: 13px;
+  color: var(--ink2);
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+/* Security Guard Dispatch Card */
 .dispatch-banner {
-  margin-top:10px;
-  padding:9px 12px;
-  border-radius:3px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:8px;
-  font-family:var(--fd);
-  font-size:14px;
-  letter-spacing:1.2px;
-  text-transform:uppercase;
-  background:rgba(212,81,58,0.22);
-  border:1px solid var(--crit);
-  color:#FFCAC2;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--fd);
+  font-size: 14px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  background: rgba(212, 81, 58, 0.22);
+  border: 1px solid var(--crit);
+  color: #FFCAC2;
 }
+
 .dispatch-banner button {
-  font-family:var(--fd);
-  font-size:12px;
-  letter-spacing:1px;
-  text-transform:uppercase;
-  background:var(--crit);
-  color:#fff;
-  border:0;
-  padding:4px 10px;
-  border-radius:2px;
-  cursor:pointer;
-  font-weight:600;
+  font-family: var(--fd);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: var(--crit);
+  color: #fff;
+  border: 0;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-weight: 600;
 }
+
 .dispatch-banner button:hover {
-  background:#FF6B55;
+  background: #FF6B55;
 }
 
 .alarm[data-l="0"] {
-  border-color:#1F4A36;
-  background:linear-gradient(180deg,#10211A,#141B21);
+  border-color: #1F4A36;
+  background: linear-gradient(180deg, #10211A, #141B21);
 }
-.alarm[data-l="0"] .state { color:var(--good); }
+.alarm[data-l="0"] .state { color: var(--good); }
 .alarm[data-l="0"] .dispatch-banner {
-  background:rgba(62,158,107,0.12);
-  border-color:rgba(62,158,107,0.4);
-  color:var(--good);
+  background: rgba(62, 158, 107, 0.12);
+  border-color: rgba(62, 158, 107, 0.4);
+  color: var(--good);
 }
 .alarm[data-l="0"] .dispatch-banner button {
-  background:#1E3E2E;
-  color:#A2E2C0;
+  background: #1E3E2E;
+  color: #A2E2C0;
 }
+
 .alarm[data-l="1"] {
-  border-color:#5C4518;
-  background:linear-gradient(180deg,#241C0C,#141B21);
+  border-color: #5C4518;
+  background: linear-gradient(180deg, #241C0C, #141B21);
 }
-.alarm[data-l="1"] .state { color:var(--warn); }
+.alarm[data-l="1"] .state { color: var(--warn); }
 .alarm[data-l="1"] .dispatch-banner {
-  background:rgba(217,163,60,0.2);
-  border-color:var(--warn);
-  color:#FFE2A6;
+  background: rgba(217, 163, 60, 0.2);
+  border-color: var(--warn);
+  color: #FFE2A6;
 }
 .alarm[data-l="1"] .dispatch-banner button {
-  background:var(--warn);
-  color:#1C1304;
+  background: var(--warn);
+  color: #1C1304;
 }
+
 .alarm[data-l="2"] {
-  border-color:#742B1E;
-  background:linear-gradient(180deg,#2B0F0A,#141B21);
-  animation:pulse 1.1s steps(2,end) infinite;
+  border-color: #742B1E;
+  background: linear-gradient(180deg, #2B0F0A, #141B21);
+  animation: pulse 1.1s steps(2, end) infinite;
 }
-.alarm[data-l="2"] .state { color:var(--crit); }
+.alarm[data-l="2"] .state { color: var(--crit); }
 @keyframes pulse {
-  50% { border-color:var(--crit); background:linear-gradient(180deg,#45150D,#1A1115); }
+  50% { border-color: var(--crit); background: linear-gradient(180deg, #45150D, #1A1115); }
 }
 
 .tiles {
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
+
 .tile {
-  background:var(--panel);
-  border:1px solid var(--line);
-  border-left:3px solid var(--line2);
-  border-radius:3px;
-  padding:9px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line2);
+  border-radius: 3px;
+  padding: 9px 10px;
 }
+
 .tile .k {
-  font-family:var(--fd);
-  font-size:12.5px;
-  letter-spacing:1.3px;
-  text-transform:uppercase;
-  color:var(--ink3);
-  line-height:1.1;
+  font-family: var(--fd);
+  font-size: 12.5px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--ink3);
+  line-height: 1.1;
 }
+
 .tile .v {
-  font-family:var(--fm);
-  font-weight:600;
-  font-size:21px;
-  margin-top:3px;
-  font-variant-numeric:tabular-nums;
+  font-family: var(--fm);
+  font-weight: 600;
+  font-size: 21px;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
 }
+
 .tile .u {
-  font-family:var(--fm);
-  font-size:11px;
-  color:var(--ink3);
-  margin-left:3px;
+  font-family: var(--fm);
+  font-size: 11px;
+  color: var(--ink3);
+  margin-left: 3px;
 }
+
 .tile .lim {
-  font-family:var(--fm);
-  font-size:10.5px;
-  color:var(--ink3);
-  margin-top:2px;
+  font-family: var(--fm);
+  font-size: 10.5px;
+  color: var(--ink3);
+  margin-top: 2px;
 }
-.tile[data-l="0"] { border-left-color:var(--good); }
-.tile[data-l="0"] .v { color:var(--ink); }
-.tile[data-l="1"] { border-left-color:var(--warn); }
-.tile[data-l="1"] .v { color:var(--warn); }
-.tile[data-l="2"] { border-left-color:var(--crit); }
-.tile[data-l="2"] .v { color:var(--crit); }
+
+.tile[data-l="0"] { border-left-color: var(--good); }
+.tile[data-l="0"] .v { color: var(--ink); }
+.tile[data-l="1"] { border-left-color: var(--warn); }
+.tile[data-l="1"] .v { color: var(--warn); }
+.tile[data-l="2"] { border-left-color: var(--crit); }
+.tile[data-l="2"] .v { color: var(--crit); }
 
 .card {
-  background:var(--panel);
-  border:1px solid var(--line);
-  border-radius:3px;
-  padding:11px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 11px 12px;
 }
+
 .card h2 {
-  font-family:var(--fd);
-  font-size:14px;
-  letter-spacing:1.6px;
-  text-transform:uppercase;
-  color:var(--ink2);
-  margin:0 0 9px;
-  font-weight:600;
+  font-family: var(--fd);
+  font-size: 14px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--ink2);
+  margin: 0 0 9px;
+  font-weight: 600;
 }
+
 .pl {
-  display:flex;
-  align-items:center;
-  gap:9px;
-  margin-bottom:7px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 7px;
 }
+
 .pl .nm {
-  font-family:var(--fd);
-  font-size:13.5px;
-  letter-spacing:1px;
-  color:var(--ink2);
-  width:92px;
-  flex:none;
+  font-family: var(--fd);
+  font-size: 13.5px;
+  letter-spacing: 1px;
+  color: var(--ink2);
+  width: 92px;
+  flex: none;
 }
+
 .pl .track {
-  flex:1;
-  height:11px;
-  background:#0B1013;
-  border:1px solid var(--line);
-  border-radius:2px;
-  overflow:hidden;
-  min-width:0;
+  flex: 1;
+  height: 11px;
+  background: #0B1013;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 0;
 }
+
 .pl .fill {
-  height:100%;
-  width:0%;
-  background:var(--good);
-  transition:width .1s linear, background .2s;
+  height: 100%;
+  width: 0%;
+  background: var(--good);
+  transition: width 0.1s linear, background 0.2s;
 }
+
 .pl .num {
-  font-family:var(--fm);
-  font-size:12.5px;
-  width:62px;
-  text-align:right;
-  flex:none;
-  font-variant-numeric:tabular-nums;
+  font-family: var(--fm);
+  font-size: 12.5px;
+  width: 62px;
+  text-align: right;
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
+
 canvas#chart {
-  display:block;
-  width:100%;
-  height:122px;
-  cursor:crosshair;
+  display: block;
+  width: 100%;
+  height: 122px;
+  cursor: crosshair;
 }
+
 .chartnote {
-  font-family:var(--fm);
-  font-size:10.5px;
-  color:var(--ink3);
-  margin-top:5px;
-  min-height:14px;
+  font-family: var(--fm);
+  font-size: 10.5px;
+  color: var(--ink3);
+  margin-top: 5px;
+  min-height: 14px;
 }
+
 ol.log {
-  list-style:none;
-  margin:0;
-  padding:0;
-  font-family:var(--fm);
-  font-size:11.5px;
-  line-height:1.55;
-  max-height:132px;
-  overflow-y:auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--fm);
+  font-size: 11.5px;
+  line-height: 1.55;
+  max-height: 132px;
+  overflow-y: auto;
 }
+
 ol.log li {
-  display:flex;
-  gap:8px;
-  padding:2px 0;
-  border-bottom:1px solid #1B2229;
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid #1B2229;
 }
+
 ol.log .ts {
-  color:var(--ink3);
-  flex:none;
+  color: var(--ink3);
+  flex: none;
 }
+
 ol.log .m {
-  min-width:0;
-  color:var(--ink2);
+  min-width: 0;
+  color: var(--ink2);
 }
-ol.log li[data-l="1"] .m { color:var(--warn); }
-ol.log li[data-l="2"] .m { color:var(--crit); }
+
+ol.log li[data-l="1"] .m { color: var(--warn); }
+ol.log li[data-l="2"] .m { color: var(--crit); }
 
 footer {
-  margin-top:16px;
-  border-top:1px solid var(--line);
-  padding-top:10px;
-  font-size:12px;
-  color:var(--ink3);
-  line-height:1.6;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  font-size: 12px;
+  color: var(--ink3);
+  line-height: 1.6;
 }
+
 footer b {
-  color:var(--ink2);
-  font-weight:500;
+  color: var(--ink2);
+  font-weight: 500;
 }
 </style>
 </head>
@@ -533,7 +611,7 @@ footer b {
         <div class="ctl"><label for="press">Press</label><input type="range" id="press" min="0" max="100" step="1" value="0"><output id="pressO">0 %</output></div>
         
         <!-- Interactive Canvas Action Tools -->
-        <button class="btn" id="toolPillar" aria-pressed="false" title="Click anywhere on the floor to drop or remove deflection pillars">Pillar tool</button>
+        <button class="btn" id="toolPillar" aria-pressed="true" title="Click anywhere on the floor to drop or remove deflection pillars">Pillar tool</button>
         <button class="btn" id="toolPanic" aria-pressed="false" title="Click inside crowd to ignite localized shockwave incident">Incident tool</button>
         <button class="btn" id="viewBtn" aria-pressed="false">Camera view</button>
         <button class="btn danger" id="surge">Surge</button>
@@ -546,8 +624,8 @@ footer b {
       <div class="canvaswrap">
         <canvas id="view"></canvas>
         <div class="canvas-hint" id="canvasHint">
-          <span class="tag" id="toolStatusTag">MODE: NAVIGATE</span>
-          <span>Click canvas with Pillar tool to add/remove obstacles. Click with Incident tool to ignite shockwaves.</span>
+          <span class="tag" id="toolStatusTag">MODE: PILLAR TOOL ACTIVE</span>
+          <span>Click arena floor to place/remove deflection obstacles. Switch to Incident tool to trigger shockwaves.</span>
         </div>
       </div>
 
@@ -567,7 +645,7 @@ footer b {
         </div>
         <div class="adv" id="alarmAdv">Flow is free. Normal entry across all corridors.</div>
         <div class="dispatch-banner" id="dispatchBanner">
-          <span id="dispatchText">Dispatch marshals &rarr; Sector C4</span>
+          <span id="dispatchText">STANDBY MARSHALS &rarr; SECTOR C4</span>
           <button id="btnAck">Acknowledge</button>
         </div>
       </div>
@@ -600,7 +678,7 @@ footer b {
   </div>
 
   <footer>
-    <b>Physical Model &amp; Calibration.</b> Continuous granular crowd simulation using the Helbing social-force model (A&nbsp;=&nbsp;2000&nbsp;N, B&nbsp;=&nbsp;0.08&nbsp;m, k_n&nbsp;=&nbsp;1.2&times;10&#8309;&nbsp;kg/s&sup2;, k_t&nbsp;=&nbsp;2.4&times;10&#8309;&nbsp;kg/s&sup2;). Discs represent human agents (0.42&ndash;0.52&nbsp;m shoulder width, 60&ndash;85&nbsp;kg). The venue is zoned into a 5&times;4 coordinate grid (A1&ndash;D5) for security marshal localization. Photoelastic camera view evaluates stress-optic retardation (&Delta;&nbsp;=&nbsp;C&middot;d&middot;&Delta;&sigma;) mapped through 16 Michel-L&eacute;vy isochromatic fringe orders. Rib-fracture benchmark (2550&nbsp;N) from Kroll et al.
+    <b>Physical Model &amp; Calibration.</b> Continuous granular crowd simulation using the Helbing social-force model (A&nbsp;=&nbsp;2000&nbsp;N, B&nbsp;=&nbsp;0.08&nbsp;m, k_n&nbsp;=&nbsp;1.2&times;10&#8309;&nbsp;kg/s&sup2;, k_t&nbsp;=&nbsp;2.4&times;10&#8309;&nbsp;kg/s&sup2;). Discs represent human agents (0.42&ndash;0.52&nbsp;m shoulder width, 60&ndash;85&nbsp;kg). The venue arena is mapped with a 5&times;4 coordinate grid (A1&ndash;D5) for security marshal localization. Photoelastic camera view evaluates stress-optic retardation (&Delta;&nbsp;=&nbsp;C&middot;d&middot;&Delta;&sigma;) mapped through 16 Michel-L&eacute;vy isochromatic fringe orders. Rib-fracture benchmark (2550&nbsp;N) from Kroll et al.
   </footer>
 </div>
 
@@ -613,7 +691,6 @@ var chart = $("chart"), cx = chart.getContext("2d");
 
 /* ---------- constants ---------- */
 var PH = {A:2000, B:0.08, KN:1.2e5, KT:2.4e5, TAU:0.5, G:0};
-// Calibrated threshold gates matching real venue occupancy
 var TH = {den:[2.5, 4.5], pk:[600, 2550], pr:[2.8, 4.5]};
 var MAXV = 6, SUB = 8, FMAX = 24000;
 
@@ -661,29 +738,29 @@ function forceCol(u){
 /* ---------- simulation state ---------- */
 var S = {
   scene: "gate", agents: [], t: 0, spawnAcc: 0, inflow: 3.6, gateW: 1.1,
-  pillars: [], clickTool: "pillar", // Active by default for immediate responsiveness!
+  pillars: [], clickTool: "pillar",
   incidents: [],
   press: 0, photo: false, autoStop: false, sound: true, surgeT: 0,
   escaped: 0, escWin: [], panels: [0, 0, 0], lvl: 0, log: [], hist: [], histAcc: 0,
   plateY: 0, pileTop: 0,
-  hotspot: { x: 10.0, y: 3.5, sector: "C4" },
+  hotspot: { x: 9.35, y: 3.5, sector: "C4", c: 3, r: 2 },
   m: { den: 0, pk: 0, mean: 0, pr: 0, flow: 0 }
 };
 
 var SC = {};
 
 function sceneGate(){
-  SC = { w: 14, h: 7, wallX: 10.4, type: "gate" };
+  SC = { w: 14, h: 7, wallX: 10.4, arenaW: 10.4, type: "gate" };
   SC.gy0 = (SC.h - S.gateW) / 2;
   SC.gy1 = (SC.h + S.gateW) / 2;
   SC.box = { x0: 8.0, y0: 1.2, x1: 10.4, y1: 5.8 };
   S.pillars = [
-    { x: 9.35, y: SC.h / 2 + 0.70, r: 0.35, stress: 0 }
+    { x: 9.35, y: SC.h / 2 + 0.70, r: 0.35, stress: 0, stressAcc: 0 }
   ];
 }
 
 function sceneBench(){
-  SC = { w: 8, h: 7, type: "bench" };
+  SC = { w: 8, h: 7, arenaW: 8, type: "bench" };
   SC.box = { x0: 0, y0: 0, x1: 8, y1: 7 };
   S.pillars = [];
 }
@@ -750,52 +827,49 @@ function segs(){
 /* ---------- physics engine: space-filling, wall-crushing & sliding ---------- */
 function step(dt){
   var A = S.agents, n = A.length, i, j, a, b;
-  var cell = 0.62, gw = Math.ceil(SC.w / cell) + 1, gh = Math.ceil(SC.h / cell) + 1, grid = {};
+  var cell = 0.62, gh = Math.ceil(SC.h / cell) + 1, grid = {};
   for(i = 0; i < n; i++){
     a = A[i]; a.fx = 0; a.fy = 0; a.f = 0;
     var gi = ((a.x / cell) | 0) * gh + ((a.y / cell) | 0);
     (grid[gi] || (grid[gi] = [])).push(i);
   }
 
-  for(var o = 0; o < S.pillars.length; o++) S.pillars[o].stress = 0;
-
   // Expanding emergent shockwaves
   for(var incIdx = S.incidents.length - 1; incIdx >= 0; incIdx--){
     var inc = S.incidents[incIdx];
-    inc.radius += 3.2 * dt;
+    inc.radius += 3.5 * dt; // Wave speed ~3.5 m/s
     inc.life -= dt;
     for(i = 0; i < n; i++){
       var pDist = Math.hypot(A[i].x - inc.x, A[i].y - inc.y);
       if(pDist < inc.radius){
-        A[i].panic = Math.min(1.0, A[i].panic + 1.6 * dt);
+        A[i].panic = Math.min(1.0, A[i].panic + 2.2 * dt);
       }
     }
-    if(inc.life <= 0 || inc.radius > 6.0) S.incidents.splice(incIdx, 1);
+    if(inc.life <= 0 || inc.radius > 6.5) S.incidents.splice(incIdx, 1);
   }
 
-  var baseV = (SC.type === "gate") ? (S.surgeT > 0 ? 2.6 : 1.15) : 0;
+  var baseV = (SC.type === "gate") ? (S.surgeT > 0 ? 2.8 : 1.18) : 0;
   var sg = segs();
 
   for(i = 0; i < n; i++){
     a = A[i];
-    var v0 = baseV * (1.0 + a.panic * 1.4);
+    var v0 = baseV * (1.0 + a.panic * 1.5);
 
     if(SC.type === "gate"){
       var ty, tx;
-      // 1. SPACE-FILLING FORWARD MARCH:
-      // Agents move forward parallel across the entire corridor width!
-      // They ONLY steer laterally when they physically reach the wall boundary!
-      if(a.x < SC.wallX - 0.45){
+      // 5. VENUE FLOW: NO PREMATURE FUNNELING
+      // Agents advance parallel to the corridor across the entire room width!
+      if(a.x < SC.wallX - 0.35){
         tx = SC.wallX + 0.1;
-        ty = a.y; // Zero premature funneling! Full room space utilization
+        ty = a.y; // March straight ahead, utilizing available width
       } else if(a.x <= SC.wallX + 0.15){
-        // At the barrier wall: agents who hit the wall slide along the barrier toward the gate!
+        // At the barrier wall: agents who hit the wall slide along the barrier toward the gate opening
         tx = SC.wallX + 0.4;
         ty = Math.min(Math.max(a.y, SC.gy0 + 0.18), SC.gy1 - 0.18);
         var slideDir = (a.y < SC.h / 2) ? 1.0 : -1.0;
-        a.fy += slideDir * a.m * 1.8; // Tangential wall slide
+        a.fy += slideDir * a.m * 2.2; // Tangential wall sliding
       } else {
-        // Exit decompression fanning
+        // Exit concourse decompression
         tx = SC.wallX + 5.0;
         ty = a.y + (a.y - SC.h / 2) * 0.22;
       }
@@ -804,7 +878,7 @@ function step(dt){
       a.fx += a.m * (v0 * dx / dl - a.vx) / PH.TAU;
       a.fy += a.m * (v0 * dy / dl - a.vy) / PH.TAU;
 
-      // Deflection Pillars Contact & Deflection
+      // Deflection Pillars Contact & Stress Accumulation
       for(var pIdx = 0; pIdx < S.pillars.length; pIdx++){
         var pil = S.pillars[pIdx];
         var px = a.x - pil.x, py = a.y - pil.y, pd = Math.hypot(px, py) || 1, pg = pd - a.r - pil.r;
@@ -816,7 +890,7 @@ function step(dt){
           a.fx += pc * px / pd;
           a.fy += pc * py / pd;
           a.f += pc;
-          pil.stress += pc;
+          pil.stressAcc += pc * dt;
         }
       }
     } else {
@@ -849,7 +923,7 @@ function step(dt){
             a.f += fc;
             b.f += fc;
 
-            // Domino rear push force transmission
+            // Rear push force transmission
             if(a.x < b.x) b.vx += a.vx * 0.12;
             else a.vx += b.vx * 0.12;
           }
@@ -885,8 +959,8 @@ function step(dt){
           else S.panels[1] += wc * dt;
 
           // Tangential sliding friction along the barrier toward the gate opening
-          var slideDir = (qy < SC.h / 2) ? 1.0 : -1.0;
-          a.fy += slideDir * (wc * 0.35);
+          var slideDir2 = (qy < SC.h / 2) ? 1.0 : -1.0;
+          a.fy += slideDir2 * (wc * 0.38);
         } else if(SC.type === "bench"){
           if(ay === S.plateY && by === S.plateY) S.panels[0] += wc * dt;
           else if(ay === SC.h && by === SC.h) S.panels[1] += wc * dt;
@@ -925,18 +999,36 @@ function step(dt){
 /* ---------- metrics & sector coordinate pinpointing ---------- */
 function measure(dtReal){
   var bx = SC.box, A = S.agents, sum = 0, n = 0, pk = 0, i, a;
+  var arenaW = SC.arenaW || SC.wallX || 10.4;
+  var secW = arenaW / 5;
+  var secH = SC.h / 4;
 
-  // Track max force per sector
+  // Track max force, density, and velocity statistics per sector
   var secCounts = new Int32Array(20);
+  var secSumV = new Float32Array(20);
+  var secSumV2 = new Float32Array(20);
   var secForces = new Float32Array(20);
+  var secMaxForce = new Float32Array(20);
+  var secMaxAgentX = new Float32Array(20);
+  var secMaxAgentY = new Float32Array(20);
 
   for(i = 0; i < A.length; i++){
     a = A[i];
-    var cIdx = Math.min(4, Math.max(0, Math.floor((a.x / SC.w) * 5)));
-    var rIdx = Math.min(3, Math.max(0, Math.floor((a.y / SC.h) * 4)));
-    var sIdx = rIdx * 5 + cIdx;
-    secCounts[sIdx]++;
-    secForces[sIdx] += a.f;
+    if(a.x <= arenaW){
+      var cIdx = Math.min(4, Math.max(0, Math.floor((a.x / arenaW) * 5)));
+      var rIdx = Math.min(3, Math.max(0, Math.floor((a.y / SC.h) * 4)));
+      var sIdx = rIdx * 5 + cIdx;
+      secCounts[sIdx]++;
+      var sp = Math.hypot(a.vx, a.vy);
+      secSumV[sIdx] += sp;
+      secSumV2[sIdx] += sp * sp;
+      secForces[sIdx] += a.f;
+      if(a.f >= secMaxForce[sIdx]){
+        secMaxForce[sIdx] = a.f;
+        secMaxAgentX[sIdx] = a.x;
+        secMaxAgentY[sIdx] = a.y;
+      }
+    }
 
     if(a.x >= bx.x0 && a.x <= bx.x1 && a.y >= bx.y0 && a.y <= bx.y1){
       n++; sum += a.f;
@@ -944,21 +1036,37 @@ function measure(dtReal){
     }
   }
 
-  // Find Peak Hotspot Sector across all 20 sectors
-  var bestIdx = 13; // default C4 (row 2, col 3)
+  // 1. Calculate localized maximum pressure: (rho * Var(v) + sigma_c) across 20 sectors
+  var secArea = secW * secH;
+  var bestIdx = 13; // default C4
   var bestScore = -1;
+  var bestFocalX = 9.35, bestFocalY = 3.5;
+
   for(var s = 0; s < 20; s++){
-    var score = secForces[s] + secCounts[s] * 40.0;
-    if(score > bestScore){
-      bestScore = score;
-      bestIdx = s;
+    var cnt = secCounts[s];
+    if(cnt > 0){
+      var rho = cnt / secArea;
+      var meanV = secSumV[s] / cnt;
+      var varV = Math.max(0, (secSumV2[s] / cnt) - (meanV * meanV));
+      var sigmaC = secForces[s] / cnt;
+      // Formula: Helbing crowd pressure (rho * Var(v)) + contact stress (sigma_c)
+      var pressureScore = (rho * varV * 180.0) + (sigmaC * 0.35) + (cnt * 20.0);
+      if(pressureScore > bestScore){
+        bestScore = pressureScore;
+        bestIdx = s;
+        bestFocalX = (secMaxForce[s] > 0) ? secMaxAgentX[s] : ((s % 5 + 0.5) * secW);
+        bestFocalY = (secMaxForce[s] > 0) ? secMaxAgentY[s] : ((Math.floor(s / 5) + 0.5) * secH);
+      }
     }
   }
+
   var bestR = Math.floor(bestIdx / 5);
   var bestC = bestIdx % 5;
   S.hotspot.sector = SECTOR_ROWS[bestR] + SECTOR_COLS[bestC];
-  S.hotspot.x = (bestC + 0.5) * (SC.w / 5);
-  S.hotspot.y = (bestR + 0.5) * (SC.h / 4);
+  S.hotspot.x = bestFocalX;
+  S.hotspot.y = bestFocalY;
+  S.hotspot.c = bestC;
+  S.hotspot.r = bestR;
 
   var area = (bx.x1 - bx.x0) * (bx.y1 - bx.y0), den = n / area;
   var mean = n ? sum / n : 0, ratio = mean > 15 ? pk / mean : 0;
@@ -1040,45 +1148,58 @@ function draw(){
   function X(x){ return ox + x * sc; }
   function Y(y){ return oy + y * sc; }
 
-  /* 1. 5x4 Sector Grid Lines on Arena Floor */
-  var secW = SC.w / 5;
+  var arenaW = SC.arenaW || SC.wallX || 10.4;
+  var secW = arenaW / 5;
   var secH = SC.h / 4;
 
+  /* Arena Floor */
   g.fillStyle = S.photo ? "#04070B" : "#0B1116";
   g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
 
-  // Clearly visible sector grid lines
-  g.strokeStyle = "rgba(79, 179, 217, 0.20)";
+  /* 1. 5x4 Sector Grid Lines on Arena Floor */
+  g.strokeStyle = "rgba(79, 179, 217, 0.22)";
   g.lineWidth = 1;
   for(var c = 1; c < 5; c++){
     g.beginPath(); g.moveTo(X(c * secW), Y(0)); g.lineTo(X(c * secW), Y(SC.h)); g.stroke();
   }
   for(var rw = 1; rw < 4; rw++){
-    g.beginPath(); g.moveTo(X(0), Y(rw * secH)); g.lineTo(X(SC.w), Y(rw * secH)); g.stroke();
+    g.beginPath(); g.moveTo(X(0), Y(rw * secH)); g.lineTo(X(arenaW), Y(rw * secH)); g.stroke();
   }
 
-  // High-contrast, glanceable sector labels (A1 ... D5)
-  g.fillStyle = "rgba(147, 164, 177, 0.70)";
-  g.font = "600 12px 'IBM Plex Mono', monospace";
+  // Monospace sector labels (A1 ... D5)
+  g.fillStyle = "rgba(147, 164, 177, 0.65)";
+  g.font = "600 11px 'IBM Plex Mono', monospace";
   for(var rIdx = 0; rIdx < 4; rIdx++){
     for(var cIdx = 0; cIdx < 5; cIdx++){
-      g.fillText(SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx], X(cIdx * secW) + 8, Y(rIdx * secH) + 18);
+      g.fillText(SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx], X(cIdx * secW) + 7, Y(rIdx * secH) + 16);
     }
   }
 
-  // 2. Active Hotspot Sector Bounding Box & Target Locator
+  // 1. Active Hotspot Sector Bounding Box & Target Locator
   if(SC.type === "gate"){
-    var hsC = Math.min(4, Math.max(0, Math.floor((S.hotspot.x / SC.w) * 5)));
-    var hsR = Math.min(3, Math.max(0, Math.floor((S.hotspot.y / SC.h) * 4)));
+    var hsC = S.hotspot.c;
+    var hsR = S.hotspot.r;
 
     // Highlight bounding box around active hotspot sector
-    g.strokeStyle = S.lvl === 2 ? "#D4513A" : S.lvl === 1 ? "#D9A33C" : "rgba(79, 179, 217, 0.65)";
-    g.lineWidth = S.lvl >= 1 ? 2.5 : 1.5;
+    g.strokeStyle = S.lvl === 2 ? "#D4513A" : S.lvl === 1 ? "#D9A33C" : "rgba(79, 179, 217, 0.50)";
+    g.lineWidth = S.lvl >= 1 ? 2.5 : 1.2;
     g.strokeRect(X(hsC * secW), Y(hsR * secH), secW * sc, secH * sc);
 
-    // Target Locator Ring
+    // Corner reticles for high-tech control-room look
+    if(S.lvl >= 1){
+      g.fillStyle = S.lvl === 2 ? "#D4513A" : "#D9A33C";
+      var rx = X(hsC * secW), ry = Y(hsR * secH), rw = secW * sc, rh = secH * sc;
+      var cLen = 8;
+      g.fillRect(rx, ry, cLen, 2); g.fillRect(rx, ry, 2, cLen);
+      g.fillRect(rx + rw - cLen, ry, cLen, 2); g.fillRect(rx + rw - 2, ry, 2, cLen);
+      g.fillRect(rx, ry + rh - 2, cLen, 2); g.fillRect(rx, ry + rh - cLen, 2, cLen);
+      g.fillRect(rx + rw - cLen, ry + rh - 2, cLen, 2); g.fillRect(rx + rw - 2, ry + rh - cLen, 2, cLen);
+    }
+
+    // Target Locator Ring pulsing at the focal point
     var pulseR = (S.lvl === 2 ? 14 : 10) + 4 * Math.sin(S.t * 7);
     g.strokeStyle = S.lvl === 2 ? "#D4513A" : S.lvl === 1 ? "#D9A33C" : "rgba(79, 179, 217, 0.85)";
+    g.lineWidth = 1.8;
     g.beginPath();
     g.arc(X(S.hotspot.x), Y(S.hotspot.y), Math.max(4, pulseR), 0, Math.PI * 2);
     g.stroke();
@@ -1107,7 +1228,6 @@ function draw(){
     // Upper Barrier Photoelastic Light-Up & Concentric Flamant Lobes
     if(u1 > 0.04 || S.photo){
       var fVal1 = Math.max(u1, S.photo ? 0.25 : 0) * 2.8;
-      // Radiant Flamant stress lobes radiating inside the solid wall
       for(var step = 3; step >= 1; step--){
         var lobeR = (step * 14 + u1 * 30);
         g.fillStyle = isoCol(fVal1 * (step / 3.0));
@@ -1163,7 +1283,7 @@ function draw(){
       g.globalAlpha = 1;
     }
 
-    // 3. DYNAMIC DEFLECTION PILLARS WITH INTERNAL DIAMETRAL COMPRESSION FRINGE LOOPS
+    // 4. DYNAMIC DEFLECTION PILLARS WITH INTERNAL DIAMETRAL COMPRESSION FRINGE LOOPS
     for(var o = 0; o < S.pillars.length; o++){
       var obst = S.pillars[o];
       var obstU = Math.min(obst.stress / 2200, 1);
@@ -1174,7 +1294,6 @@ function draw(){
       // Photoelastic light-up under crowd deflection pressure
       if(obstU > 0.05 || S.photo){
         var pilF = Math.max(obstU, S.photo ? 0.35 : 0) * 2.8;
-        // Butterfly diametral compression fringe rings
         for(var sRing = 3; sRing >= 1; sRing--){
           g.fillStyle = isoCol(pilF * (sRing / 3.0));
           g.beginPath();
@@ -1203,7 +1322,7 @@ function draw(){
 
     g.fillStyle = "#3E9E6B";
     g.font = "600 12px 'IBM Plex Mono', monospace";
-    g.fillText("EXIT →", X(SC.wallX) + 14, Y(SC.h / 2) + 4);
+    g.fillText("EXIT \u2192", X(SC.wallX) + 14, Y(SC.h / 2) + 4);
 
   } else {
     // Lab bench mode
@@ -1229,7 +1348,7 @@ function draw(){
     g.fillText("LOAD CELL", X(0.25), Y(SC.h) + Math.max(18, 0.1 * sc + 16));
   }
 
-  // Panic Shockwave Expanding Contagion Rings
+  // 3. Panic Shockwave Expanding Contagion Rings
   for(var j = 0; j < S.incidents.length; j++){
     var inc = S.incidents[j];
     g.strokeStyle = "rgba(212, 81, 58, 0.85)";
@@ -1244,10 +1363,10 @@ function draw(){
     g.fill();
   }
 
-  // Crowd Agents
+  // Crowd Agents - PROPERLY DECLARED VAR I TO PREVENT STRICT-MODE CRASH
   var A = S.agents, FS = 400;
-  for(i = 0; i < A.length; i++){
-    var a = A[i], rr = Math.max(0.5, a.r * sc);
+  for(var aIdx = 0; aIdx < A.length; aIdx++){
+    var a = A[aIdx], rr = Math.max(0.5, a.r * sc);
     if(S.photo){
       g.fillStyle = isoCol(a.f / FS);
     } else {
@@ -1273,7 +1392,7 @@ function draw(){
     g.fillRect(X(0), Y(0), SC.w * sc, SC.h * sc);
     g.fillStyle = "#D4513A";
     g.font = "700 14px 'Barlow Condensed', sans-serif";
-    g.fillText("REAR SURGE ACTIVE — COLLECTIVE FORWARD PUSH", X(0.35), Y(0) + 24);
+    g.fillText("REAR SURGE ACTIVE \u2014 COLLECTIVE FORWARD PUSH", X(0.35), Y(0) + 24);
   }
 }
 
@@ -1368,7 +1487,7 @@ function drawChart(){
         g.beginPath();
         g.arc(hx, hy, 3.5, 0, Math.PI * 2);
         g.fill();
-        $("chartNote").textContent = (S.hist[hi].t).toFixed(0) + " s — peak " + Math.round(S.hist[hi].p) + " N · average " + Math.round(S.hist[hi].m) + " N · ratio " + (S.hist[hi].m > 5 ? (S.hist[hi].p / S.hist[hi].m).toFixed(1) : "–") + "×";
+        $("chartNote").textContent = (S.hist[hi].t).toFixed(0) + " s \u2014 peak " + Math.round(S.hist[hi].p) + " N \u00B7 average " + Math.round(S.hist[hi].m) + " N \u00B7 ratio " + (S.hist[hi].m > 5 ? (S.hist[hi].p / S.hist[hi].m).toFixed(1) : "\u2013") + "\u00D7";
       }
     }
   }
@@ -1400,11 +1519,12 @@ function ui(){
   $("tPk").setAttribute("data-l", lp);  $("vPk").textContent = Math.round(S.m.pk);
   $("tPr").setAttribute("data-l", lr);  $("vPr").textContent = S.m.pr.toFixed(1);
   $("vFl").textContent = SC.type === "gate" ? Math.round(S.m.flow) : Math.round(S.m.mean);
-  $("vSec").textContent = SC.type === "gate" ? S.hotspot.sector : "–";
+  $("vSec").textContent = SC.type === "gate" ? S.hotspot.sector : "\u2013";
 
   var al = $("alarm");
   $("alarmSector").textContent = "Sector " + S.hotspot.sector;
-  $("dispatchText").textContent = (L >= 1 ? "🚨 DISPATCH MARSHALS → SECTOR " : "STANDBY MARSHALS → SECTOR ") + S.hotspot.sector;
+  // 2. DISPATCH TEXT - ZERO EMOJIS
+  $("dispatchText").textContent = (L >= 1 ? "DISPATCH MARSHALS \u2192 SECTOR " : "STANDBY MARSHALS \u2192 SECTOR ") + S.hotspot.sector;
 
   if(L !== S.lvl){
     var AD = SC.type === "gate" ? ADV : ADVB;
@@ -1413,12 +1533,12 @@ function ui(){
     $("alarmAdv").textContent = AD[L][1];
 
     var why = [];
-    if(ld === L && L) why.push("density " + S.m.den.toFixed(1) + "/m²");
+    if(ld === L && L) why.push("density " + S.m.den.toFixed(1) + "/m\u00B2");
     if(lp === L && L) why.push("peak " + Math.round(S.m.pk) + " N");
-    if(lr === L && L) why.push("ratio " + S.m.pr.toFixed(1) + "×");
+    if(lr === L && L) why.push("ratio " + S.m.pr.toFixed(1) + "\u00D7");
 
     var sectorNotice = (SC.type === "gate" && L > 0) ? " in Sector " + S.hotspot.sector : "";
-    pushLog(L, (L === 2 ? "DANGER — " : L === 1 ? "CAUTION — " : "Cleared — ") + (why.length ? why.join(", ") : "all metrics nominal") + sectorNotice);
+    pushLog(L, (L === 2 ? "DANGER \u2014 " : L === 1 ? "CAUTION \u2014 " : "Cleared \u2014 ") + (why.length ? why.join(", ") : "all metrics nominal") + sectorNotice);
 
     if(L === 2){
       beep();
@@ -1443,40 +1563,47 @@ function ui(){
   }
 }
 
-/* ---------- simulation loop ---------- */
+/* ---------- simulation loop with error safety ---------- */
 var last = 0;
 function frame(ts){
-  var dt = Math.min((ts - last) / 1000 || 0.016, 1 / 25);
-  last = ts;
-  if(S.surgeT > 0) S.surgeT -= dt;
-  S.panels = [0, 0, 0];
-  var sub = dt / SUB;
+  try {
+    var dt = Math.min((ts - last) / 1000 || 0.016, 1 / 25);
+    last = ts;
+    if(S.surgeT > 0) S.surgeT -= dt;
+    S.panels = [0, 0, 0];
+    for(var o = 0; o < S.pillars.length; o++) S.pillars[o].stressAcc = 0;
+    var sub = dt / SUB;
 
-  for(var i = 0; i < SUB; i++){
-    if(SC.type === "gate"){
-      S.spawnAcc += S.inflow * sub;
-      while(S.spawnAcc >= 1 && S.agents.length < 240){
-        S.spawnAcc -= 1;
-        S.agents.push(mkAgent(0.35 + Math.random() * 0.5, 0.4 + Math.random() * (SC.h - 0.8)));
+    for(var i = 0; i < SUB; i++){
+      if(SC.type === "gate"){
+        S.spawnAcc += S.inflow * sub;
+        while(S.spawnAcc >= 1 && S.agents.length < 240){
+          S.spawnAcc -= 1;
+          S.agents.push(mkAgent(0.35 + Math.random() * 0.5, 0.4 + Math.random() * (SC.h - 0.8)));
+        }
+        if(S.spawnAcc > 1) S.spawnAcc = 1;
       }
-      if(S.spawnAcc > 1) S.spawnAcc = 1;
+      step(sub);
+      S.t += sub;
     }
-    step(sub);
-    S.t += sub;
-  }
 
-  for(var p = 0; p < 3; p++) S.panels[p] /= dt;
-  measure(dt);
-  S.histAcc += dt;
-  if(S.histAcc > 0.1){
-    S.histAcc = 0;
-    S.hist.push({t: S.t, p: S.m.pk, m: S.m.mean});
-    if(S.hist.length > 400) S.hist.shift();
-  }
+    for(var p = 0; p < 3; p++) S.panels[p] /= dt;
+    for(var o2 = 0; o2 < S.pillars.length; o2++) S.pillars[o2].stress = S.pillars[o2].stressAcc / dt;
 
-  draw();
-  drawChart();
-  ui();
+    measure(dt);
+    S.histAcc += dt;
+    if(S.histAcc > 0.1){
+      S.histAcc = 0;
+      S.hist.push({t: S.t, p: S.m.pk, m: S.m.mean});
+      if(S.hist.length > 400) S.hist.shift();
+    }
+
+    draw();
+    drawChart();
+    ui();
+  } catch(err) {
+    console.error("ForceSight sim loop error:", err);
+  }
   requestAnimationFrame(frame);
 }
 
@@ -1497,9 +1624,9 @@ function mode(){
   $("p2n").textContent = gate ? "P2 below gate" : "Floor reaction";
   $("p3n").textContent = "P1 + P2 total";
   $("row3").hidden = !gate;
-  $("kFl").textContent = gate ? "Hotspot · Flow" : "Average force";
+  $("kFl").textContent = gate ? "Hotspot \u00B7 Flow" : "Average force";
   $("uFl").textContent = gate ? "/m" : "N";
-  $("lFl").textContent = gate ? "sector · throughput" : "mean over all discs";
+  $("lFl").textContent = gate ? "sector \u00B7 throughput" : "mean over all discs";
   $("modeNote").textContent = S.photo ? "Camera view: colours are photoelastic fringe orders" : "Plan view: brightness is force carried";
   $("rampBar").style.background = S.photo
     ? "linear-gradient(90deg," + isoCol(0) + "," + isoCol(0.6) + "," + isoCol(1.0) + "," + isoCol(1.5) + "," + isoCol(2.1) + "," + isoCol(2.7) + ")"
@@ -1526,12 +1653,14 @@ $("press").oninput = function(){
 
 // 3. CANVAS TOOLS: PILLAR PLACEMENT & INCIDENT SHOCKWAVES
 function updateToolState(){
-  $("toolPillar").setAttribute("aria-pressed", S.clickTool === "pillar" ? "true" : "false");
-  $("toolPanic").setAttribute("aria-pressed", S.clickTool === "panic" ? "true" : "false");
-  if(S.clickTool === "pillar"){
+  var isPillar = (S.clickTool === "pillar");
+  var isPanic = (S.clickTool === "panic");
+  $("toolPillar").setAttribute("aria-pressed", isPillar ? "true" : "false");
+  $("toolPanic").setAttribute("aria-pressed", isPanic ? "true" : "false");
+  if(isPillar){
     $("toolStatusTag").textContent = "MODE: PILLAR TOOL ACTIVE";
     $("canvasHint").style.color = "var(--steel)";
-  } else if(S.clickTool === "panic"){
+  } else if(isPanic){
     $("toolStatusTag").textContent = "MODE: INCIDENT TOOL ACTIVE";
     $("canvasHint").style.color = "#FFB8AD";
   } else {
@@ -1556,12 +1685,16 @@ view.addEventListener("click", function(e){
   var r = view.getBoundingClientRect();
   var pad = 14, sc = Math.max(0.5, Math.min((r.width - pad * 2) / SC.w, (r.height - pad * 2) / SC.h));
   var ox = (r.width - SC.w * sc) / 2, oy = (r.height - SC.h * sc) / 2;
-  var wx = (e.clientX - r.left - ox) / sc;
-  var wy = (e.clientY - r.top - oy) / sc;
+  
+  var mx = (e.offsetX !== undefined && e.offsetX >= 0 && e.offsetX <= r.width) ? e.offsetX : (e.clientX - r.left);
+  var my = (e.offsetY !== undefined && e.offsetY >= 0 && e.offsetY <= r.height) ? e.offsetY : (e.clientY - r.top);
+  var wx = (mx - ox) / sc;
+  var wy = (my - oy) / sc;
 
   if(wx < 0.2 || wx > SC.w - 0.2 || wy < 0.2 || wy > SC.h - 0.2) return;
 
-  var cIdx = Math.min(4, Math.max(0, Math.floor((wx / SC.w) * 5)));
+  var arenaW = SC.arenaW || SC.wallX || 10.4;
+  var cIdx = Math.min(4, Math.max(0, Math.floor((Math.min(wx, arenaW - 0.05) / arenaW) * 5)));
   var rIdx = Math.min(3, Math.max(0, Math.floor((wy / SC.h) * 4)));
   var clickedSector = SECTOR_ROWS[rIdx] + SECTOR_COLS[cIdx];
 
@@ -1578,7 +1711,7 @@ view.addEventListener("click", function(e){
     }
     // Add new pillar anywhere on the arena floor (ahead of the wall)
     if(!removed && wx < SC.wallX - 0.45 && wx > 0.8){
-      S.pillars.push({ x: wx, y: wy, r: 0.35, stress: 0 });
+      S.pillars.push({ x: wx, y: wy, r: 0.35, stress: 0, stressAcc: 0 });
       pushLog(0, "Deflection pillar placed in Sector " + clickedSector);
     }
     renderLog();
@@ -1586,7 +1719,7 @@ view.addEventListener("click", function(e){
     // Trigger localized shockwave incident
     S.incidents.push({ x: wx, y: wy, radius: 0.2, life: 3.8 });
     beep();
-    pushLog(2, "SHOCKWAVE INCIDENT in Sector " + clickedSector + " &rarr; Social panic contagion spreading.");
+    pushLog(2, "SHOCKWAVE INCIDENT in Sector " + clickedSector + " \u2192 Social panic contagion spreading.");
     renderLog();
   }
 });
