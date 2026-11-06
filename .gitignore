@@ -13,3 +13,11 @@ venv/
 ENV/
 data/benchmarks/*.mp4
 data/benchmarks/*.avi
+
+# Next.js and Node
+node_modules/
+.next/
+next-env.d.ts
+.DS_Store
+*.log
+
