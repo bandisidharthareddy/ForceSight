@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Shield, Radio, Terminal, Smartphone, Monitor, ChevronRight, Play } from 'lucide-react';
+import { Shield, Radio, Terminal, Smartphone, Monitor, ChevronRight, Play, Zap, Cpu } from 'lucide-react';
 import ScrambleText from './ScrambleText';
 import MagneticButton from './MagneticButton';
+import { usePerformance } from './PerformanceContext';
 
 interface Chapter {
   id: string;
@@ -14,14 +15,16 @@ interface Chapter {
 
 const CHAPTERS: Chapter[] = [
   { id: 'prologue', number: '01', title: 'PROLOGUE' },
-  { id: 'engine', number: '02', title: 'HELBING ENGINE' },
-  { id: 'architecture', number: '03', title: '360° ARCHITECTURE' },
-  { id: 'specifications', number: '04', title: 'PHOTOELASTIC SPECS' },
-  { id: 'matrix', number: '05', title: 'SECTOR MATRIX' },
-  { id: 'deployment', number: '06', title: 'FLEET DISPATCH' },
+  { id: 'real-investigation', number: '02', title: 'REAL FORENSICS' },
+  { id: 'engine', number: '03', title: 'HELBING ENGINE' },
+  { id: 'architecture', number: '04', title: '360° ARCHITECTURE' },
+  { id: 'specifications', number: '05', title: 'PHOTOELASTIC SPECS' },
+  { id: 'matrix', number: '06', title: 'SECTOR MATRIX' },
+  { id: 'deployment', number: '07', title: 'FLEET DISPATCH' },
 ];
 
 export default function DualTierNav() {
+  const { isEcoMode, toggleEcoMode } = usePerformance();
   const [activeChapter, setActiveChapter] = useState<string>('prologue');
   const [scrollPercent, setScrollPercent] = useState<number>(0);
   const [hasScrolled, setHasScrolled] = useState<boolean>(false);
@@ -117,6 +120,17 @@ export default function DualTierNav() {
 
           {/* Dual Portal Direct Launch CTAs */}
           <div className="flex items-center gap-2">
+            <MagneticButton>
+              <Link
+                href="/cctv"
+                className="px-3 py-1.5 rounded-full bg-white/10 border border-white/15 hover:border-cyan-400 text-[11px] font-mono text-white flex items-center gap-1.5 transition shadow-sm"
+                title="OpenCV and CCTV live video integration"
+              >
+                <Radio className="w-3.5 h-3.5 text-[#38BDF8]" />
+                <span className="hidden sm:inline">CCTV Feeds</span>
+              </Link>
+            </MagneticButton>
+
             <MagneticButton>
               <Link
                 href="/demo"

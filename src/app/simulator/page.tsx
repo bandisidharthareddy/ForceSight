@@ -35,9 +35,12 @@ import {
   MapPin,
 } from 'lucide-react';
 import { SectorMetric } from '../api/telemetry/route';
+import { usePerformance } from '../../components/PerformanceContext';
 
 // Indoor Venue Types & Configurations
 type VenueType = 'concert' | 'nightclub' | 'metro' | 'warehouse';
+
+export type SimulationStage = 'stage1_calm' | 'stage2_incident' | 'stage3_surge' | 'stage4_intervention';
 
 interface VenueConfig {
   id: VenueType;
@@ -185,6 +188,9 @@ interface Agent {
   mass: number;
   force: number;             // Contact & compressive force in Newtons
   panic: number;             // 0.0 (calm) to 1.0 (panicked)
+  anchorX?: number;          // Leisure / gathering location
+  anchorY?: number;
+  intent?: 'calm_enjoy' | 'alarmed' | 'rush_egress' | 'orderly_evac';
 }
 
 interface Pillar {
@@ -212,6 +218,7 @@ interface ChartDataPoint {
 const SECTOR_ROWS = ['A', 'B', 'C', 'D'];
 
 export default function SimulatorPage() {
+  const { isEcoMode, toggleEcoMode } = usePerformance();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // --- Real-time Interactive Sliders ---
@@ -233,6 +240,14 @@ export default function SimulatorPage() {
   const [activeTool, setActiveTool] = useState<ToolMode>('pillar');
   const activeToolRef = useRef<ToolMode>(activeTool);
   useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
+
+  // --- Stage-Wise Incident Lifecycle State ---
+  const [currentStage, setCurrentStage] = useState<SimulationStage>('stage1_calm');
+  const currentStageRef = useRef<SimulationStage>('stage1_calm');
+  useEffect(() => { currentStageRef.current = currentStage; }, [currentStage]);
+
+  // Stage trigger action ref
+  const setStageActionRef = useRef<((stage: SimulationStage) => void) | null>(null);
 
   // --- UI & Telemetry State ---
   const [is3DView, setIs3DView] = useState<boolean>(false);
@@ -427,6 +442,10 @@ export default function SimulatorPage() {
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
 
+    // Fire hazard origin coordinates across simulation stages
+    const fireOriginX = CANVAS_WIDTH * 0.35;
+    const fireOriginY = selectedVenueRef.current === 'concert' ? CANVAS_HEIGHT - 75 : 120;
+
     // Gate wall top boundary parameters
     const WALL_BOTTOM_Y = 75;
 
@@ -496,6 +515,19 @@ export default function SimulatorPage() {
     const totalCells = cols * rows;
     const grid: number[][] = Array.from({ length: totalCells }, () => []);
 
+    // Procedural Fire & Smoke Particle system for Stage 2 & 3
+    interface SimFireParticle {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      size: number;
+      life: number;
+      maxLife: number;
+      type: 'flame' | 'smoke' | 'spark';
+    }
+    let simFireParticles: SimFireParticle[] = [];
+
     // Helper to spawn a new agent at the bottom
     function spawnAgent(customY?: number): Agent {
       const radius = 9.5 + Math.random() * 2.2;
@@ -513,6 +545,9 @@ export default function SimulatorPage() {
         mass,
         force: 0,
         panic: 0,
+        anchorX: x,
+        anchorY: y,
+        intent: 'calm_enjoy',
       };
     }
 
@@ -529,6 +564,59 @@ export default function SimulatorPage() {
 
     clearPillarsActionRef.current = () => {
       pillars = [];
+    };
+
+    // Stage switching action handler
+    setStageActionRef.current = (stage: SimulationStage) => {
+      currentStageRef.current = stage;
+      setCurrentStage(stage);
+
+      if (stage === 'stage1_calm') {
+        setSpawnRate(3.0);
+        setGateWidth(180);
+        setKineticDrive(1.0);
+        simFireParticles = [];
+        shockwaves = [];
+        for (const a of agents) {
+          a.panic = 0;
+          a.intent = 'calm_enjoy';
+        }
+      } else if (stage === 'stage2_incident') {
+        setSpawnRate(4.0);
+        setKineticDrive(1.3);
+        // Trigger localized explosion & panic near the stage (Sector D2 / D3)
+        const fireX = CANVAS_WIDTH * 0.35;
+        const fireY = selectedVenueRef.current === 'concert' ? CANVAS_HEIGHT - 75 : 120;
+        shockwaves.push({ id: Date.now(), x: fireX, y: fireY, radius: 15, life: 3.0 });
+        for (const a of agents) {
+          const dist = Math.hypot(a.x - fireX, a.y - fireY);
+          if (dist < 260) {
+            a.panic = 0.6;
+            a.intent = 'alarmed';
+          }
+        }
+      } else if (stage === 'stage3_surge') {
+        setSpawnRate(8.5);
+        setGateWidth(110);
+        setKineticDrive(2.3);
+        // Trigger widespread shockwave & panic surge
+        const fireX = CANVAS_WIDTH * 0.35;
+        const fireY = selectedVenueRef.current === 'concert' ? CANVAS_HEIGHT - 75 : 120;
+        shockwaves.push({ id: Date.now(), x: fireX, y: fireY, radius: 25, life: 4.0 });
+        for (const a of agents) {
+          a.panic = 1.0;
+          a.intent = 'rush_egress';
+        }
+      } else if (stage === 'stage4_intervention') {
+        // ForceSight Early Warning & Egress Throttle (Relief gates open, speed moderated)
+        setSpawnRate(3.5);
+        setGateWidth(220); // Marshals open wide relief gates!
+        setKineticDrive(1.15);
+        for (const a of agents) {
+          a.panic = Math.min(0.3, a.panic);
+          a.intent = 'orderly_evac';
+        }
+      }
     };
 
     triggerIncidentActionRef.current = (x: number, y: number) => {
@@ -659,10 +747,58 @@ export default function SimulatorPage() {
         }
 
         // ---------------------------------------------------------------------
-        // 1. SPAWN LOGIC: Continuously spawn agents near bottom
+        // 1. STAGE-SPECIFIC FIRE & SMOKE PARTICLES & CONTROLS
         // ---------------------------------------------------------------------
+        const stageNow = currentStageRef.current;
+        const fireOriginX = CANVAS_WIDTH * 0.35;
+        const fireOriginY = selectedVenue === 'concert' ? CANVAS_HEIGHT - 75 : 120;
+
+        if (stageNow === 'stage2_incident' || stageNow === 'stage3_surge' || stageNow === 'stage4_intervention') {
+          const spawnCount = stageNow === 'stage2_incident' ? 4 : stageNow === 'stage3_surge' ? 10 : 3;
+          for (let k = 0; k < spawnCount; k++) {
+            // Flame
+            simFireParticles.push({
+              x: fireOriginX + (Math.random() - 0.5) * 45,
+              y: fireOriginY + (Math.random() - 0.5) * 12,
+              vx: (Math.random() - 0.5) * 20,
+              vy: -25 - Math.random() * 55,
+              size: 6 + Math.random() * 10,
+              life: 0,
+              maxLife: 0.5 + Math.random() * 0.4,
+              type: 'flame',
+            });
+            // Smoke
+            if (Math.random() < 0.4) {
+              simFireParticles.push({
+                x: fireOriginX + (Math.random() - 0.5) * 35,
+                y: fireOriginY - 15,
+                vx: -10 + (Math.random() - 0.5) * 25,
+                vy: -20 - Math.random() * 35,
+                size: 14 + Math.random() * 16,
+                life: 0,
+                maxLife: 1.5 + Math.random() * 1.0,
+                type: 'smoke',
+              });
+            }
+          }
+        }
+
+        // Update fire particles
+        for (let p = simFireParticles.length - 1; p >= 0; p--) {
+          const pt = simFireParticles[p];
+          pt.life += dt;
+          pt.x += pt.vx * dt;
+          pt.y += pt.vy * dt;
+          if (pt.type === 'smoke') pt.size += dt * 10;
+          if (pt.life >= pt.maxLife) simFireParticles.splice(p, 1);
+        }
+
+        // ---------------------------------------------------------------------
+        // 1. SPAWN LOGIC: Continuously spawn agents near bottom (capped to 65 on 4GB Eco Mode)
+        // ---------------------------------------------------------------------
+        const maxAgentCap = isEcoMode ? 65 : 130;
         spawnAccumulator += currentSpawnRate * dt;
-        while (spawnAccumulator >= 1 && agents.length < 130) {
+        while (spawnAccumulator >= 1 && agents.length < maxAgentCap) {
           spawnAccumulator -= 1;
           agents.push(spawnAgent());
         }
@@ -700,24 +836,19 @@ export default function SimulatorPage() {
           let sideWallStress = 0;
 
           // Panic decay
-          if (a.panic > 0) {
+          if (a.panic > 0 && stageNow === 'stage1_calm') {
             a.panic = Math.max(0, a.panic - dt * 0.15);
           }
 
           const currentAgentV0 = v0_desired_base * (1.0 + a.panic * 0.8);
 
-          // A. DRIVE FORCE: Propel toward gate target with smart waypoint steering
-          // Clamping targetX to the open gate aperture ensures parallel forward movement (targetX = a.x)
-          // for all agents with direct line of sight to the gate.
+          // A. DRIVE FORCE: Propel toward goal according to active stage intent!
+          // Clamping targetX to the open gate aperture ensures parallel forward movement
           const edgeBuffer = Math.min(a.radius + 3, (gateRightEdge - gateLeftEdge) * 0.45);
           const gateTargetLeft = gateLeftEdge + edgeBuffer;
           const gateTargetRight = gateRightEdge - edgeBuffer;
           const targetX = Math.max(gateTargetLeft, Math.min(gateTargetRight, a.x));
 
-          // Smart Waypoint Steering:
-          // Agents behind the solid wall steer toward the gate opening entrance (WALL_BOTTOM_Y + 22)
-          // so they naturally route around the wall rather than trying to cut diagonally through the solid corner!
-          // Only agents in front of or inside the gate opening steer directly upward to the exit (-40).
           let targetY = -40;
           if (a.y > WALL_BOTTOM_Y) {
             const isBehindWall = a.x < gateLeftEdge + 4 || a.x > gateRightEdge - 4;
@@ -726,14 +857,77 @@ export default function SimulatorPage() {
             }
           }
 
-          const dxGoal = targetX - a.x;
-          const dyGoal = targetY - a.y;
-          const distGoal = Math.hypot(dxGoal, dyGoal) || 1;
-          const desiredVx = (dxGoal / distGoal) * currentAgentV0 * 35;
-          const desiredVy = (dyGoal / distGoal) * currentAgentV0 * 35;
+          // STAGE-SPECIFIC BEHAVIOR ENGINE:
+          if (stageNow === 'stage1_calm') {
+            // STAGE 1: CALM CONCERT / LEISURE FLOW
+            // People do NOT run toward the gates! They sway rhythmically, mingle, and listen to the stage.
+            const anchorX = a.anchorX ?? a.x;
+            const anchorY = a.anchorY ?? a.y;
+            const leisureSwayX = Math.sin(timeNow * 0.0025 + a.id) * 8;
+            const leisureSwayY = Math.cos(timeNow * 0.002 + a.id) * 5;
+            const targetLeisureX = anchorX + leisureSwayX;
+            const targetLeisureY = anchorY + leisureSwayY;
 
-          fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
-          fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+            const dxLeisure = targetLeisureX - a.x;
+            const dyLeisure = targetLeisureY - a.y;
+            const distLeisure = Math.hypot(dxLeisure, dyLeisure) || 1;
+            const desiredVx = (dxLeisure / distLeisure) * Math.min(distLeisure * 1.5, 18);
+            const desiredVy = (dyLeisure / distLeisure) * Math.min(distLeisure * 1.5, 18);
+
+            fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
+            fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+          } else if (stageNow === 'stage2_incident') {
+            // STAGE 2: INCIDENT / PYROTECHNIC IGNITION
+            // Agents near the fire stop enjoying, turn around, and start backing away. Rest of the crowd notices gradually.
+            const distToFire = Math.hypot(a.x - fireOriginX, a.y - fireOriginY);
+            if (distToFire < 240) {
+              // Back away from the fire origin!
+              const awayDx = a.x - fireOriginX;
+              const awayDy = a.y - fireOriginY;
+              const awayDist = Math.hypot(awayDx, awayDy) || 1;
+              const backSpeed = 22 + (1 - distToFire / 240) * 45;
+              const desiredVx = (awayDx / awayDist) * backSpeed;
+              const desiredVy = (awayDy / awayDist) * backSpeed;
+
+              fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
+              fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+            } else {
+              // Mild curiosity / slowing down
+              const dxGoal = targetX - a.x;
+              const dyGoal = targetY - a.y;
+              const distGoal = Math.hypot(dxGoal, dyGoal) || 1;
+              const slowSpeed = 16;
+              const desiredVx = (dxGoal / distGoal) * slowSpeed;
+              const desiredVy = (dyGoal / distGoal) * slowSpeed;
+
+              fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
+              fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+            }
+          } else if (stageNow === 'stage3_surge') {
+            // STAGE 3: MASS SURGE / STAMPEDE TOWARDS GATES
+            // The trigger has fired! Entire crowd frantically sprints toward the North Exit chokepoints.
+            const dxGoal = targetX - a.x;
+            const dyGoal = targetY - a.y;
+            const distGoal = Math.hypot(dxGoal, dyGoal) || 1;
+            const sprintSpeed = currentAgentV0 * 42;
+            const desiredVx = (dxGoal / distGoal) * sprintSpeed;
+            const desiredVy = (dyGoal / distGoal) * sprintSpeed;
+
+            fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
+            fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+          } else {
+            // STAGE 4: FORCESIGHT EARLY INTERVENTION & ORDERLY EVACUATION
+            // Throttled laminar exit speed, relief gates unlatched, organized egress
+            const dxGoal = targetX - a.x;
+            const dyGoal = targetY - a.y;
+            const distGoal = Math.hypot(dxGoal, dyGoal) || 1;
+            const orderlySpeed = currentAgentV0 * 24;
+            const desiredVx = (dxGoal / distGoal) * orderlySpeed;
+            const desiredVy = (dyGoal / distGoal) * orderlySpeed;
+
+            fx += (a.mass * (desiredVx - a.vx)) / PH.TAU;
+            fy += (a.mass * (desiredVy - a.vy)) / PH.TAU;
+          }
 
           // B. AGENT-TO-AGENT SOCIAL FORCE & CONTACT COMPRESSION (Evaluated first to measure collective crowd pressure)
           const agCellX = Math.min(cols - 1, Math.max(0, Math.floor(a.x / cellSize)));
@@ -1683,6 +1877,49 @@ export default function SimulatorPage() {
         ctx.restore();
       }
 
+      // D2. Procedural Fire, Volumetric Smoke & Flame Tongues for Incident Stages
+      if (simFireParticles.length > 0) {
+        ctx.save();
+        // Smoke clouds (source-over)
+        ctx.globalCompositeOperation = 'source-over';
+        for (let i = 0; i < simFireParticles.length; i++) {
+          const pt = simFireParticles[i];
+          if (pt.type === 'smoke') {
+            const alpha = Math.max(0, 1 - pt.life / pt.maxLife) * 0.45;
+            ctx.fillStyle = `rgba(30, 36, 48, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Flame tongues (additive screen blend)
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < simFireParticles.length; i++) {
+          const pt = simFireParticles[i];
+          if (pt.type === 'flame') {
+            const progress = pt.life / pt.maxLife;
+            const alpha = Math.max(0, 1 - progress);
+            const r = 255;
+            const g = Math.floor(180 * (1 - progress * 0.75));
+            const b = Math.floor(30 * (1 - progress));
+
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pt.size * (1 - progress * 0.4), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Fire origin callout label
+        ctx.fillStyle = '#EF4444';
+        ctx.font = "bold 9px 'JetBrains Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.fillText('🔥 HAZARD ORIGIN: PYROTECHNIC IGNITION', fireOriginX, fireOriginY + 24);
+        ctx.textAlign = 'left';
+        ctx.restore();
+      }
+
       // E. Fading Motion Trails (Velocity Vectors)
       ctx.save();
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
@@ -1818,6 +2055,16 @@ export default function SimulatorPage() {
             {isCritical ? 'CRITICAL OVERLOAD' : isWarning ? 'WARNING: ELEVATED' : 'FLOW OPTIMAL'}
           </div>
 
+          {/* CCTV Feed Shortcut */}
+          <Link
+            href="/cctv"
+            className="px-3.5 py-1.5 rounded-full bg-[#10B981]/15 text-[#065F46] hover:bg-[#10B981] hover:text-black border border-[#10B981]/40 transition flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase shadow-sm group"
+            title="Inspect live OpenCV video ingestion & benchmark footage"
+          >
+            <Radio className="w-3.5 h-3.5 text-[#10B981] group-hover:scale-110 transition-transform" />
+            <span className="font-bold">CCTV Feeds</span>
+          </Link>
+
           {/* Incident Demo Video */}
           <Link
             href="/demo"
@@ -1825,7 +2072,7 @@ export default function SimulatorPage() {
             title="Watch full simulated fire outbreak & crowd surge demonstration video"
           >
             <Play className="w-3.5 h-3.5 text-[#EF4444] group-hover:scale-110 transition-transform fill-current" />
-            <span className="font-bold">Incident Demo Video</span>
+            <span className="font-bold">Incident Demo</span>
           </Link>
 
           {/* Return to Showcase */}
@@ -1846,6 +2093,20 @@ export default function SimulatorPage() {
             <span>Guard App</span>
           </Link>
 
+          {/* 4GB Low-End Eco Mode Toggle */}
+          <button
+            onClick={toggleEcoMode}
+            className={`px-3 py-1.5 rounded-full border text-xs font-mono tracking-wider uppercase font-bold transition flex items-center gap-1.5 shadow-sm ${
+              isEcoMode
+                ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
+                : 'bg-white border-black/15 text-[#111111] hover:border-black'
+            }`}
+            title="Toggle Eco-Mode optimization for 4GB RAM & lower-end devices"
+          >
+            <Zap className={`w-3.5 h-3.5 ${isEcoMode ? 'text-emerald-600 fill-current' : 'text-gray-400'}`} />
+            <span>{isEcoMode ? '4GB ECO: ON' : 'ECO MODE'}</span>
+          </button>
+
           {/* Holographic 3D View Toggle */}
           <button
             onClick={() => setIs3DView((prev) => !prev)}
@@ -1864,77 +2125,162 @@ export default function SimulatorPage() {
       {/* =========================================================================
           INDOOR VENUE REPLICAS SELECTOR DECK (CONCERTS, NIGHTCLUBS, TRANSIT, RAVES)
          ========================================================================= */}
-      <section className="bg-white border border-black/15 shadow-sm px-4 sm:px-6 py-3 mb-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 font-mono">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-[#111111] uppercase tracking-wider mr-1">
-            <Compass className="w-4 h-4 text-[#38BDF8]" />
-            <span>INDOOR REPLICAS:</span>
+      <section className="bg-white border border-black/15 shadow-sm px-4 sm:px-6 py-3 mb-4 rounded-xl flex flex-col gap-3 font-mono">
+        {/* Row 1: Venues */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-black/10 pb-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#111111] uppercase tracking-wider mr-1">
+              <Compass className="w-4 h-4 text-[#38BDF8]" />
+              <span>INDOOR REPLICAS:</span>
+            </div>
+
+            {/* 1. Concert Arena */}
+            <button
+              onClick={() => switchVenueActionRef.current?.('concert')}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+                selectedVenue === 'concert'
+                  ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+              }`}
+            >
+              <Music className="w-3.5 h-3.5 text-[#38BDF8]" />
+              <span>Concert Arena</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Stage ➔ North Exit</span>
+            </button>
+
+            {/* 2. Nightclub Ingress */}
+            <button
+              onClick={() => switchVenueActionRef.current?.('nightclub')}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+                selectedVenue === 'nightclub'
+                  ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-[#F59E0B]" />
+              <span>Nightclub Ingress</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">VIP Stanchions</span>
+            </button>
+
+            {/* 3. Metro Concourse */}
+            <button
+              onClick={() => switchVenueActionRef.current?.('metro')}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+                selectedVenue === 'metro'
+                  ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+              }`}
+            >
+              <Train className="w-3.5 h-3.5 text-[#10B981]" />
+              <span>Metro Concourse</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Fare Gates</span>
+            </button>
+
+            {/* 4. Warehouse Rave */}
+            <button
+              onClick={() => switchVenueActionRef.current?.('warehouse')}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
+                selectedVenue === 'warehouse'
+                  ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-[#EF4444]" />
+              <span>Warehouse Rave</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Dual Fire Exits</span>
+            </button>
           </div>
 
-          {/* 1. Concert Arena */}
-          <button
-            onClick={() => switchVenueActionRef.current?.('concert')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
-              selectedVenue === 'concert'
-                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
-                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
-            }`}
-          >
-            <Music className="w-3.5 h-3.5 text-[#38BDF8]" />
-            <span>Concert Arena</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Stage ➔ North Exit</span>
-          </button>
-
-          {/* 2. Nightclub Ingress */}
-          <button
-            onClick={() => switchVenueActionRef.current?.('nightclub')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
-              selectedVenue === 'nightclub'
-                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
-                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-[#F59E0B]" />
-            <span>Nightclub Ingress</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">VIP Stanchions</span>
-          </button>
-
-          {/* 3. Metro Concourse */}
-          <button
-            onClick={() => switchVenueActionRef.current?.('metro')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
-              selectedVenue === 'metro'
-                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
-                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
-            }`}
-          >
-            <Train className="w-3.5 h-3.5 text-[#10B981]" />
-            <span>Metro Concourse</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Fare Gates</span>
-          </button>
-
-          {/* 4. Warehouse Rave */}
-          <button
-            onClick={() => switchVenueActionRef.current?.('warehouse')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-mono tracking-wider uppercase transition-all flex items-center gap-2 shadow-sm ${
-              selectedVenue === 'warehouse'
-                ? 'bg-[#111111] text-[#F5F2EB] border-transparent font-bold ring-2 ring-[#38BDF8] scale-102'
-                : 'bg-[#F5F2EB] border-black/10 text-[#111111] hover:border-black/30'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5 text-[#EF4444]" />
-            <span>Warehouse Rave</span>
-            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/10 text-white/80 hidden sm:inline">Dual Fire Exits</span>
-          </button>
+          <div className="text-xs text-[#111111]/70 flex items-center gap-2 min-w-0 flex-1 md:justify-end">
+            <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping shrink-0" />
+            <span className="font-bold text-[#111111] shrink-0">HAZARD:</span>
+            <span className="truncate text-[11px] text-[#111111]/85" title={INDOOR_VENUES[selectedVenue].riskDescription}>
+              {INDOOR_VENUES[selectedVenue].riskDescription}
+            </span>
+          </div>
         </div>
 
-        {/* Real-time Risk Profile Telemetry Indicator */}
-        <div className="text-xs text-[#111111]/70 flex items-center gap-2 min-w-0 flex-1 md:justify-end">
-          <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping shrink-0" />
-          <span className="font-bold text-[#111111] shrink-0">HAZARD:</span>
-          <span className="truncate text-[11px] text-[#111111]/85" title={INDOOR_VENUES[selectedVenue].riskDescription}>
-            {INDOOR_VENUES[selectedVenue].riskDescription}
-          </span>
+        {/* Row 2: 4-Stage Lifecycle Controller (Explicit Trigger Explanation) */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs uppercase text-[#111111] font-bold flex items-center gap-1.5">
+              <Flame className="w-4 h-4 text-[#EF4444]" />
+              <span>STAGE-WISE INCIDENT LIFECYCLE:</span>
+            </span>
+            <span className="text-[10px] text-[#111111]/60 hidden md:inline">
+              (Explains crowd trigger behavior)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 flex-1 max-w-4xl">
+            {/* Stage 1 */}
+            <button
+              onClick={() => setStageActionRef.current?.('stage1_calm')}
+              className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 shadow-sm ${
+                currentStage === 'stage1_calm'
+                  ? 'bg-cyan-50 border-[#38BDF8] ring-2 ring-[#38BDF8]/40 text-cyan-950 font-bold'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111]/80 hover:border-black/30'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-[#38BDF8] font-bold">STAGE 1</span>
+                <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+              </div>
+              <span className="text-xs font-bold leading-tight">Calm Performance</span>
+              <span className="text-[9px] text-[#111111]/60 leading-tight">Crowd enjoys stage; zero gate rush</span>
+            </button>
+
+            {/* Stage 2 */}
+            <button
+              onClick={() => setStageActionRef.current?.('stage2_incident')}
+              className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 shadow-sm ${
+                currentStage === 'stage2_incident'
+                  ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-400/40 text-amber-950 font-bold'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111]/80 hover:border-black/30'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-amber-600 font-bold">STAGE 2 ⚠️</span>
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              </div>
+              <span className="text-xs font-bold leading-tight">Pyrotechnic Fire</span>
+              <span className="text-[9px] text-[#111111]/60 leading-tight">Trigger fires! Front backs away</span>
+            </button>
+
+            {/* Stage 3 */}
+            <button
+              onClick={() => setStageActionRef.current?.('stage3_surge')}
+              className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 shadow-sm ${
+                currentStage === 'stage3_surge'
+                  ? 'bg-red-50 border-red-500 ring-2 ring-red-500/40 text-red-950 font-bold'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111]/80 hover:border-black/30'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-red-600 font-bold">STAGE 3 🚨</span>
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+              </div>
+              <span className="text-xs font-bold leading-tight">Mass Surge to Gate</span>
+              <span className="text-[9px] text-[#111111]/60 leading-tight">Crowd frantically storms into exit!</span>
+            </button>
+
+            {/* Stage 4 */}
+            <button
+              onClick={() => setStageActionRef.current?.('stage4_intervention')}
+              className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 shadow-sm ${
+                currentStage === 'stage4_intervention'
+                  ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/40 text-emerald-950 font-bold'
+                  : 'bg-[#F5F2EB] border-black/10 text-[#111111]/80 hover:border-black/30'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-emerald-700 font-bold">STAGE 4 🛡️</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-600" />
+              </div>
+              <span className="text-xs font-bold leading-tight">Early Intervention</span>
+              <span className="text-[9px] text-[#111111]/60 leading-tight">Relief gates opened; flow moderated</span>
+            </button>
+          </div>
         </div>
       </section>
 

@@ -2,6 +2,14 @@
 const nextConfig = {
   reactStrictMode: false,
   trailingSlash: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+    ],
+  },
   async rewrites() {
     return [
       {

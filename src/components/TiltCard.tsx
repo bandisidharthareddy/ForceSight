@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { motion, useSpring, useMotionValue } from 'framer-motion';
+import { usePerformance } from './PerformanceContext';
 
 interface TiltCardProps {
   children: React.ReactNode;
@@ -16,6 +17,7 @@ export default function TiltCard({
   maxTilt = 14,
   spotlightColor = 'rgba(56, 189, 248, 0.16)',
 }: TiltCardProps) {
+  const { isEcoMode } = usePerformance();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
   const [isHovered, setIsHovered] = useState<boolean>(false);
@@ -69,14 +71,14 @@ export default function TiltCard({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       style={{
-        transformStyle: isTouchDevice ? 'flat' : 'preserve-3d',
-        rotateX: isTouchDevice ? 0 : rotateX,
-        rotateY: isTouchDevice ? 0 : rotateY,
+        transformStyle: isTouchDevice || isEcoMode ? 'flat' : 'preserve-3d',
+        rotateX: isTouchDevice || isEcoMode ? 0 : rotateX,
+        rotateY: isTouchDevice || isEcoMode ? 0 : rotateY,
       }}
       className={`relative overflow-hidden ${className}`}
     >
       {/* 3D Internal Spotlight Reflection */}
-      {!isTouchDevice && isHovered && (
+      {!isTouchDevice && !isEcoMode && isHovered && (
         <div
           className="pointer-events-none absolute inset-0 z-20 transition-opacity duration-300"
           style={{
@@ -89,8 +91,8 @@ export default function TiltCard({
       <div
         className="h-full w-full relative z-10"
         style={{
-          transform: isTouchDevice ? 'none' : 'translateZ(20px)',
-          transformStyle: isTouchDevice ? 'flat' : 'preserve-3d',
+          transform: isTouchDevice || isEcoMode ? 'none' : 'translateZ(20px)',
+          transformStyle: isTouchDevice || isEcoMode ? 'flat' : 'preserve-3d',
         }}
       >
         {children}

@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Activity, Radio, Flame, Sparkles, Layers, Sliders } from 'lucide-react';
+import { Activity, Radio, Flame, Sparkles, Layers, Sliders, Zap } from 'lucide-react';
 import ScrambleText from './ScrambleText';
+import { usePerformance } from './PerformanceContext';
 
 interface Agent {
   x: number;
@@ -15,8 +16,10 @@ interface Agent {
 }
 
 export default function HeroCanvasSimulation() {
+  const { isEcoMode } = usePerformance();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const isVisibleRef = useRef<boolean>(true);
 
   const [fps, setFps] = useState<number>(60);
   const [agentCount, setAgentCount] = useState<number>(55);
@@ -30,6 +33,19 @@ export default function HeroCanvasSimulation() {
     y: -1000,
     active: false,
   });
+
+  // Track viewport visibility with IntersectionObserver so loop pauses when out of view
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisibleRef.current = entry.isIntersecting;
+      },
+      { threshold: 0.05 }
+    );
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -54,8 +70,8 @@ export default function HeroCanvasSimulation() {
     let frameCounter = 0;
     let lastFpsTime = performance.now();
 
-    // High-DPI Canvas Setup
-    const dpr = typeof window !== 'undefined' ? Math.min(2, window.devicePixelRatio || 1) : 1;
+    // High-DPI Canvas Setup (capped to 1.0 on Eco Mode to reduce GPU pixel load by 4x)
+    const dpr = typeof window !== 'undefined' ? (isEcoMode ? 1 : Math.min(1.5, window.devicePixelRatio || 1)) : 1;
     const width = 840;
     const height = 480;
     canvas.width = width * dpr;
@@ -70,8 +86,9 @@ export default function HeroCanvasSimulation() {
     let agents: Agent[] = [];
     const escapedTimes: number[] = [];
 
-    // Initialize crowd
-    for (let i = 0; i < 50; i++) {
+    // Initialize crowd (lighter pool for 4GB RAM devices)
+    const initialPool = isEcoMode ? 28 : 50;
+    for (let i = 0; i < initialPool; i++) {
       agents.push({
         x: 40 + Math.random() * (width - 80),
         y: height - 20 - Math.random() * (height * 0.7),
@@ -86,6 +103,11 @@ export default function HeroCanvasSimulation() {
     let spawnTimer = 0;
 
     const render = (now: number) => {
+      animId = requestAnimationFrame(render);
+
+      // Only execute physics and canvas drawing when component is actually in viewport
+      if (!isVisibleRef.current) return;
+
       const dt = Math.min((now - lastTime) / 1000, 0.033);
       lastTime = now;
 
@@ -269,7 +291,9 @@ export default function HeroCanvasSimulation() {
 
       // Photoelastic Particles Bloom
       ctx.save();
-      ctx.globalCompositeOperation = 'screen';
+      if (!isEcoMode) {
+        ctx.globalCompositeOperation = 'screen';
+      }
 
       for (const a of agents) {
         const stressU = Math.min(1, a.force / 3800);
@@ -280,15 +304,17 @@ export default function HeroCanvasSimulation() {
         if (stressU > 0.75) {
           color = '#EF4444'; // Critical: Crimson
           shadowColor = '#EF4444';
-          blur = 16;
+          blur = isEcoMode ? 0 : 16;
         } else if (stressU > 0.4) {
           color = '#F59E0B'; // Warning: Amber
           shadowColor = '#F59E0B';
-          blur = 10;
+          blur = isEcoMode ? 0 : 10;
         }
 
-        ctx.shadowBlur = blur;
-        ctx.shadowColor = shadowColor;
+        if (!isEcoMode) {
+          ctx.shadowBlur = blur;
+          ctx.shadowColor = shadowColor;
+        }
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2);
@@ -318,8 +344,6 @@ export default function HeroCanvasSimulation() {
         ctx.stroke();
         ctx.restore();
       }
-
-      animId = requestAnimationFrame(render);
     };
 
     animId = requestAnimationFrame(render);

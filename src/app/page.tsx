@@ -31,6 +31,9 @@ import CylindricalCarousel from '../components/CylindricalCarousel';
 import TiltCard from '../components/TiltCard';
 import MagneticButton from '../components/MagneticButton';
 import ScrambleText from '../components/ScrambleText';
+import RealWorldInvestigationTheater from '../components/RealWorldInvestigationTheater';
+import HeroSectionWithMorphingPhotoArc from '../components/wensity/blocks/hero-section-with-morphing-photo-arc';
+import { WensityErrorBoundary, WensityBlockSkeleton } from '../components/wensity/WensityErrorBoundary';
 
 export default function ForceSightFlagshipPage() {
   const [mounted, setMounted] = useState<boolean>(false);
@@ -90,7 +93,7 @@ export default function ForceSightFlagshipPage() {
             <div className="flex items-center gap-6">
               <span>EST. 2026 &middot; HELBING MODEL</span>
               <span>CALIBRATED PSI: 0&ndash;100</span>
-              <span className="text-[#111111] font-bold">Z&Uuml;RICH / GLOBAL</span>
+              <span className="text-[#111111] font-bold">WITH LOVE FROM HYDERABAD</span>
             </div>
           </div>
 
@@ -228,7 +231,33 @@ export default function ForceSightFlagshipPage() {
         </section>
 
         {/* =====================================================================
-            SECTION 02: HELBING SOCIAL FORCE MATHEMATICAL ENGINE
+            SECTION 02: REAL-WORLD INCIDENT FORENSIC THEATER (ITAEWON & ASTROWORLD)
+           ===================================================================== */}
+        <section
+          id="real-investigation"
+          className="py-24 px-6 sm:px-10 max-w-7xl mx-auto border-t border-black/10"
+        >
+          <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#EF4444] flex items-center gap-2 mb-2 font-bold">
+                <span className="w-2 h-2 rounded-full bg-[#EF4444] animate-ping" />
+                <span>CASE STUDY FORENSICS &middot; HISTORICAL REPLAY</span>
+              </div>
+              <h2 className="text-4xl sm:text-6xl font-black font-display tracking-tight text-[#111111] uppercase">
+                Testing Against Reality
+              </h2>
+            </div>
+            <p className="text-sm font-mono text-[#111111]/70 max-w-md">
+              Testing the ForceSight model on actual footage from the 2022 Itaewon alleyway crush and 2021 Astroworld concert surge to demonstrate how photoelastic early-warning telemetry could have prevented mass casualties.
+            </p>
+          </div>
+
+          {/* Interactive Case Study Motion Graphic Theater */}
+          <RealWorldInvestigationTheater />
+        </section>
+
+        {/* =====================================================================
+            SECTION 03: HELBING SOCIAL FORCE MATHEMATICAL ENGINE
            ===================================================================== */}
         <section
           id="engine"
@@ -341,6 +370,15 @@ export default function ForceSightFlagshipPage() {
             </TiltCard>
           </div>
         </section>
+
+        {/* =====================================================================
+            WENSITY PREMIUM BLOCK: MORPHING PHOTO ARC SUB-SYSTEM HERO
+           ===================================================================== */}
+        <WensityErrorBoundary componentName="HeroSectionWithMorphingPhotoArc">
+          <React.Suspense fallback={<WensityBlockSkeleton />}>
+            <HeroSectionWithMorphingPhotoArc />
+          </React.Suspense>
+        </WensityErrorBoundary>
 
         {/* =====================================================================
             SECTION 03: 360° CYLINDRICAL VIEWPORT CAROUSEL
@@ -579,81 +617,129 @@ export default function ForceSightFlagshipPage() {
             </p>
           </div>
 
-          {/* Dual Launch Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
-            {/* Simulator Console Card */}
-            <div className="rounded-2xl border border-black/15 bg-[#111111] text-[#F5F2EB] p-8 shadow-2xl flex flex-col justify-between">
+          {/* Dispatch Cards Grid: Now featuring 4 portals (Simulator, CCTV OpenCV, Incident Demo, Mobile Guard) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {/* 1. CCTV & OpenCV Video Integration */}
+            <div className="rounded-2xl border border-black/15 bg-[#111111] text-[#F5F2EB] p-6 shadow-xl flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between font-mono text-xs text-white/50 mb-6">
+                <div className="flex items-center justify-between font-mono text-xs text-white/50 mb-4">
+                  <span className="flex items-center gap-1.5 text-[#10B981]">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+                    OPENCV PIPELINE
+                  </span>
+                  <span>/cctv</span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-[#10B981] mb-4">
+                  <Radio className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl font-black font-display uppercase tracking-tight text-white mb-2">
+                  CCTV Video Feeds
+                </h3>
+                <p className="text-xs text-white/70 leading-relaxed font-body mb-6">
+                  Live benchmark MP4 stream ingestion with Farneb&auml;ck optical flow, velocity variance extraction, and real-time chromatic stress blending.
+                </p>
+              </div>
+              <div className="pt-4 border-t border-white/10">
+                <Link
+                  href="/cctv"
+                  className="w-full text-center py-2.5 rounded-full bg-[#10B981] hover:bg-emerald-400 text-black font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition"
+                >
+                  <span>Open CCTV Stream</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* 2. Simulator Console Card */}
+            <div className="rounded-2xl border border-black/15 bg-[#111111] text-[#F5F2EB] p-6 shadow-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between font-mono text-xs text-white/50 mb-4">
                   <span className="flex items-center gap-1.5 text-[#38BDF8]">
                     <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping" />
                     DESKTOP CONSOLE
                   </span>
-                  <span>PORTAL /simulator</span>
+                  <span>/simulator</span>
                 </div>
-
-                <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-[#38BDF8] mb-6">
-                  <Monitor className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-[#38BDF8] mb-4">
+                  <Monitor className="w-5 h-5" />
                 </div>
-
-                <h3 className="text-3xl font-black font-display uppercase tracking-tight text-white mb-3">
+                <h3 className="text-xl font-black font-display uppercase tracking-tight text-white mb-2">
                   Digital Twin Sandbox
                 </h3>
-
-                <p className="text-xs sm:text-sm text-white/70 leading-relaxed font-body mb-8">
-                  Full control deck with continuous 60 FPS Canvas rendering, 3D holographic perspective toggle, interactive sliders (Spawn Rate, Gate Width, Kinetic Panic), and rolling 30-second Recharts stress telemetry.
+                <p className="text-xs text-white/70 leading-relaxed font-body mb-6">
+                  Full control deck with continuous 60 FPS Canvas rendering, 4 indoor venues, 3D holographic view, deflection pillars, and telemetry graphs.
                 </p>
               </div>
-
-              <div className="pt-6 border-t border-white/10 flex items-center justify-between">
-                <MagneticButton>
-                  <Link
-                    href="/simulator"
-                    className="px-6 py-3 rounded-full bg-[#38BDF8] hover:bg-cyan-400 text-black font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition"
-                  >
-                    <span>Open Desktop Twin</span>
-                    <ArrowUpRight className="w-4 h-4" />
-                  </Link>
-                </MagneticButton>
-                <span className="font-mono text-xs text-white/50">60 FPS Loop</span>
+              <div className="pt-4 border-t border-white/10">
+                <Link
+                  href="/simulator"
+                  className="w-full text-center py-2.5 rounded-full bg-[#38BDF8] hover:bg-cyan-400 text-black font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition"
+                >
+                  <span>Open Desktop Twin</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
             </div>
 
-            {/* Mobile Guard Companion Card */}
-            <div className="rounded-2xl border border-black/15 bg-white text-[#111111] p-8 shadow-2xl flex flex-col justify-between">
+            {/* 3. Incident Demonstration Demo */}
+            <div className="rounded-2xl border border-black/15 bg-white text-[#111111] p-6 shadow-xl flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between font-mono text-xs text-[#111111]/50 mb-6">
+                <div className="flex items-center justify-between font-mono text-xs text-[#111111]/50 mb-4">
                   <span className="flex items-center gap-1.5 text-[#EF4444]">
                     <span className="w-2 h-2 rounded-full bg-[#EF4444] animate-ping" />
-                    GUARD APP
+                    CRITICAL SCENARIO
                   </span>
-                  <span>PORTAL /mobile</span>
+                  <span>/demo</span>
                 </div>
-
-                <div className="w-12 h-12 rounded-xl bg-black/5 border border-black/10 flex items-center justify-center text-[#EF4444] mb-6">
-                  <Smartphone className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-black/5 border border-black/10 flex items-center justify-center text-[#EF4444] mb-4">
+                  <Flame className="w-5 h-5" />
                 </div>
-
-                <h3 className="text-3xl font-black font-display uppercase tracking-tight text-[#111111] mb-3">
-                  Mobile Guard Alert Dashboard
+                <h3 className="text-xl font-black font-display uppercase tracking-tight text-[#111111] mb-2">
+                  Incident Demo Video
                 </h3>
-
-                <p className="text-xs sm:text-sm text-[#111111]/70 leading-relaxed font-body mb-8">
-                  Edge-to-edge security marshal unit with isolated selected-box Peak Stress Index, tri-state alert engine, deep red critical background pulse, hardware vibration haptics, and instant marshal sector dispatch.
+                <p className="text-xs text-[#111111]/70 leading-relaxed font-body mb-6">
+                  Stage fire ignition simulation demonstrating panic waves, counter-flow egress, and automated threshold alerts with siren audio.
                 </p>
               </div>
+              <div className="pt-4 border-t border-black/10">
+                <Link
+                  href="/demo"
+                  className="w-full text-center py-2.5 rounded-full bg-[#EF4444] hover:bg-red-600 text-white font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition"
+                >
+                  <span>Watch Demo Video</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
 
-              <div className="pt-6 border-t border-black/10 flex items-center justify-between">
-                <MagneticButton>
-                  <Link
-                    href="/mobile"
-                    className="px-6 py-3 rounded-full bg-[#111111] hover:bg-black text-[#F5F2EB] font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition"
-                  >
-                    <span>Open Mobile Guard</span>
-                    <ArrowUpRight className="w-4 h-4" />
-                  </Link>
-                </MagneticButton>
-                <span className="font-mono text-xs text-[#111111]/50">300ms Synchronized</span>
+            {/* 4. Mobile Guard Companion Card */}
+            <div className="rounded-2xl border border-black/15 bg-white text-[#111111] p-6 shadow-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between font-mono text-xs text-[#111111]/50 mb-4">
+                  <span className="flex items-center gap-1.5 text-[#38BDF8]">
+                    <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-ping" />
+                    GUARD APP
+                  </span>
+                  <span>/mobile</span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-black/5 border border-black/10 flex items-center justify-center text-[#111111] mb-4">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl font-black font-display uppercase tracking-tight text-[#111111] mb-2">
+                  Marshal Mobile App
+                </h3>
+                <p className="text-xs text-[#111111]/70 leading-relaxed font-body mb-6">
+                  Edge handheld unit with isolated sector Peak Stress Index, tri-state alert engine, haptic feedback, and marshal dispatch.
+                </p>
+              </div>
+              <div className="pt-4 border-t border-black/10">
+                <Link
+                  href="/mobile"
+                  className="w-full text-center py-2.5 rounded-full bg-[#111111] hover:bg-black text-[#F5F2EB] font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition"
+                >
+                  <span>Open Mobile Guard</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
             </div>
           </div>
@@ -692,8 +778,14 @@ export default function ForceSightFlagshipPage() {
           </div>
 
           <div className="flex items-center gap-6">
+            <Link href="/cctv" className="hover:text-[#111111] transition">
+              /cctv
+            </Link>
             <Link href="/simulator" className="hover:text-[#111111] transition">
               /simulator
+            </Link>
+            <Link href="/demo" className="hover:text-[#111111] transition">
+              /demo
             </Link>
             <Link href="/mobile" className="hover:text-[#111111] transition">
               /mobile
@@ -703,8 +795,13 @@ export default function ForceSightFlagshipPage() {
             </Link>
           </div>
 
-          <div>
-            &copy; 2026 FORCESIGHT DYNAMICS. ALL RIGHTS RESERVED.
+          <div className="flex flex-col sm:flex-row items-center sm:items-end gap-1.5 sm:gap-4">
+            <span className="font-bold text-[#111111] tracking-wider uppercase">
+              With Love From Hyderabad
+            </span>
+            <span className="text-[10px] text-[#111111]/50">
+              &copy; 2026 FORCESIGHT DYNAMICS
+            </span>
           </div>
         </footer>
       </div>

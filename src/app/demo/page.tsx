@@ -682,6 +682,15 @@ export default function IncidentDemoPage() {
           </Link>
 
           <Link
+            href="/cctv"
+            className="px-3.5 py-1.5 rounded-full bg-[#10B981]/15 text-[#065F46] hover:bg-[#10B981] hover:text-black border border-[#10B981]/40 transition flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase shadow-sm font-bold"
+            title="OpenCV and CCTV live video integration"
+          >
+            <Radio className="w-3.5 h-3.5 text-[#10B981]" />
+            <span>CCTV Feeds &rarr;</span>
+          </Link>
+
+          <Link
             href="/simulator"
             className="px-3.5 py-1.5 rounded-full bg-[#111111] text-[#F5F2EB] hover:bg-black hover:text-[#38BDF8] border border-black/15 transition flex items-center gap-1.5 text-xs font-mono tracking-wider uppercase shadow-sm font-bold"
           >

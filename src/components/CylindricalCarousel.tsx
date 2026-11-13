@@ -14,6 +14,7 @@ import {
   Compass,
 } from 'lucide-react';
 import ScrambleText from './ScrambleText';
+import { usePerformance } from './PerformanceContext';
 
 interface CarouselItem {
   id: string;
@@ -103,6 +104,7 @@ const CAROUSEL_ITEMS: CarouselItem[] = [
 ];
 
 export default function CylindricalCarousel() {
+  const { isEcoMode } = usePerformance();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [rotation, setRotation] = useState<number>(0);
   const targetRotationRef = useRef<number>(0);
@@ -116,6 +118,8 @@ export default function CylindricalCarousel() {
 
   const N = CAROUSEL_ITEMS.length;
   const angleStep = 360 / N;
+
+  const isVisibleRef = useRef<boolean>(true);
 
   // Responsive radius calculation
   const updateDimensions = useCallback(() => {
@@ -133,6 +137,19 @@ export default function CylindricalCarousel() {
     }
   }, []);
 
+  // Track visibility with IntersectionObserver so RAF loop pauses offscreen
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisibleRef.current = entry.isIntersecting;
+      },
+      { threshold: 0.05 }
+    );
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
@@ -143,6 +160,9 @@ export default function CylindricalCarousel() {
   useEffect(() => {
     let animId: number;
     const loop = () => {
+      animId = requestAnimationFrame(loop);
+      if (!isVisibleRef.current) return;
+
       if (autoRotate && !isDraggingRef.current) {
         targetRotationRef.current -= 0.16;
       }
@@ -150,8 +170,6 @@ export default function CylindricalCarousel() {
       const diff = targetRotationRef.current - currentRotationRef.current;
       currentRotationRef.current += diff * 0.08;
       setRotation(currentRotationRef.current);
-
-      animId = requestAnimationFrame(loop);
     };
 
     animId = requestAnimationFrame(loop);
@@ -291,7 +309,7 @@ export default function CylindricalCarousel() {
                   marginTop: '-210px',
                   transform: `rotateY(${panelAngle}deg) translateZ(${radius}px) scale(${isFront ? 1.05 : 0.94})`,
                   transformStyle: 'preserve-3d',
-                  filter: isBack ? 'blur(3.5px) brightness(0.65)' : 'none',
+                  filter: isEcoMode ? 'none' : isBack ? 'blur(3px) brightness(0.7)' : 'none',
                   opacity: isBack ? 0.35 : isFront ? 1.0 : 0.78,
                   backfaceVisibility: 'visible',
                 }}

@@ -233,6 +233,15 @@ export default function MobileGuardDashboard() {
             {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
 
+          {/* CCTV Feed Shortcut */}
+          <Link
+            href="/cctv"
+            className="p-2 rounded-full bg-white border border-black/15 text-[#10B981] hover:text-emerald-700 shadow-sm"
+            title="Inspect Live CCTV Feeds"
+          >
+            <Radio className="w-4 h-4" />
+          </Link>
+
           {/* Desktop Simulator Link */}
           <Link
             href="/simulator"
@@ -272,6 +281,20 @@ export default function MobileGuardDashboard() {
           MAIN CENTER ALERT STATE & SELECTED BOX METRICS
          ========================================================================= */}
       <main className="flex-1 flex flex-col justify-center items-center px-4 py-4 text-center max-w-md mx-auto w-full">
+        {/* Simulation Source Badge */}
+        <div className="w-full mb-3 px-3 py-1.5 rounded-lg bg-black/5 border border-black/10 flex items-center justify-between text-[10px] font-mono">
+          <div className="flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 text-[#38BDF8] animate-pulse" />
+            <span className="text-[#111111]/60 uppercase">ACTIVE FEED:</span>
+            <span className="font-bold text-[#111111] truncate max-w-[200px]">
+              {telemetry.venueName || 'Concert Arena & Stage Barricade'}
+            </span>
+          </div>
+          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold uppercase tracking-wider text-[8px]">
+            SYNCED
+          </span>
+        </div>
+
         {/* State Icon Indicator */}
         <div className="mb-3 relative">
           {isSelectedNormal && (

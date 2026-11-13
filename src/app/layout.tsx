@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { PerformanceProvider } from '../components/PerformanceContext';
 
 export const metadata: Metadata = {
   title: 'ForceSight Digital Twin | Predictive Crowd Stress Simulation',
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        {children}
+        <PerformanceProvider>
+          {children}
+        </PerformanceProvider>
       </body>
     </html>
   );
